@@ -24,6 +24,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **REQ-006**: Provide paired-device listing and revocation from the phone.
 - **REQ-007**: Persist in-app notifications for completed, failed, and attention-required tasks.
 - **REQ-008**: Browse and preview files only within discovered Git project roots from the mobile app.
+- **REQ-009**: Display read-only Git branch and change information for a discovered project before opening its terminal.
 - **SEC-001**: Do not expose source files, terminal output, or project paths to the relay in plaintext.
 - **SEC-002**: Device revocation must prevent future relay-frame decryption for the revoked device.
 - **CON-001**: Firebase push delivery cannot be enabled without Firebase project credentials supplied by the account owner.
@@ -78,6 +79,17 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 | TASK-018 | Add compact mobile styles for file navigation and previews in `web/src/accessibility.css`. | ✅ | 2026-08-02 |
 | TASK-019 | Add traversal and preview-limit tests, then run the complete release check. | ✅ | 2026-08-02 |
 
+### Implementation Phase 5
+
+- GOAL-005: Add a mobile Git status view that preserves terminal-first control for writes.
+
+| Task | Description | Completed | Date |
+|---|---|---:|---|
+| TASK-020 | Add project-constrained Git status and diff-summary reads in `agent/git-service.js`. | ✅ | 2026-08-02 |
+| TASK-021 | Add encrypted/direct Git status handlers in `agent/server.js`. | ✅ | 2026-08-02 |
+| TASK-022 | Add a branch, changed-file, and diff-summary view in `web/src/main.jsx`. | ✅ | 2026-08-02 |
+| TASK-023 | Add Git workspace styles and service tests, then run the release check. | ✅ | 2026-08-02 |
+
 ## 3. Alternatives
 
 - **ALT-001**: Build a separate proprietary AI agent. Rejected because Vertex must run existing CLI agents unchanged.
@@ -100,6 +112,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **FILE-006**: `web/src/accessibility.css` styles the mobile interface.
 - **FILE-007**: `README.md` documents Firebase and Nativine setup.
 - **FILE-008**: `agent/file-service.js` constrains project file access.
+- **FILE-009**: `agent/git-service.js` provides project-constrained Git metadata.
 
 ## 6. Testing
 
@@ -109,6 +122,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **TEST-004**: Verify revoked relay device keys are rejected.
 - **TEST-005**: Run `npm test`, `npm run build`, and browser/mobile regression checks.
 - **TEST-006**: Verify project-root traversal rejection and binary/oversized preview handling.
+- **TEST-007**: Verify Git metadata is available only to approved projects and contains no write operation.
 
 ## 7. Risks & Assumptions
 
