@@ -27,6 +27,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **REQ-009**: Display read-only Git branch and change information for a discovered project before opening its terminal.
 - **REQ-010**: Display read-only Docker container state and bounded container logs from the mobile app.
 - **REQ-011**: Install the laptop agent as a user service that preserves the configured encrypted relay URL across reboot and login.
+- **REQ-012**: Allow the user to keep the laptop awake only while Vertex-managed tasks execute, without implementing remote wake.
 - **SEC-001**: Do not expose source files, terminal output, or project paths to the relay in plaintext.
 - **SEC-002**: Device revocation must prevent future relay-frame decryption for the revoked device.
 - **CON-001**: Firebase push delivery cannot be enabled without Firebase project credentials supplied by the account owner.
@@ -113,6 +114,18 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 | TASK-029 | Document one-command Arch/Linux installation, status, logs, update, and uninstall steps in `README.md`. | ✅ | 2026-08-02 |
 | TASK-030 | Validate shell syntax and run the application release check. | ✅ | 2026-08-02 |
 
+### Implementation Phase 8
+
+- GOAL-008: Provide opt-in sleep inhibition for managed terminal tasks.
+
+| Task | Description | Completed | Date |
+|---|---|---:|---|
+| TASK-031 | Add a mode-0600 settings store with a `preventSleep` default in `agent/settings-store.js`. | ✅ | 2026-08-02 |
+| TASK-032 | Wrap managed task commands with `systemd-inhibit` only when enabled and available in `agent/session-manager.js`. | ✅ | 2026-08-02 |
+| TASK-033 | Add encrypted/direct settings handlers and health metadata in `agent/server.js`. | ✅ | 2026-08-02 |
+| TASK-034 | Add the app toggle and setting state in `web/src/main.jsx`. | ✅ | 2026-08-02 |
+| TASK-035 | Add tests for settings persistence and command wrapping, then run the release check. | ✅ | 2026-08-02 |
+
 ## 3. Alternatives
 
 - **ALT-001**: Build a separate proprietary AI agent. Rejected because Vertex must run existing CLI agents unchanged.
@@ -138,6 +151,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **FILE-009**: `agent/git-service.js` provides project-constrained Git metadata.
 - **FILE-010**: `agent/docker-service.js` provides allowlisted Docker observations.
 - **FILE-011**: `scripts/install-linux.sh` creates the persistent user service.
+- **FILE-012**: `agent/settings-store.js` persists laptop sleep preferences.
 
 ## 6. Testing
 
@@ -150,6 +164,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **TEST-007**: Verify Git metadata is available only to approved projects and contains no write operation.
 - **TEST-008**: Verify Docker command arguments are allowlisted and log output is bounded.
 - **TEST-009**: Verify installer shell syntax and required environment validation.
+- **TEST-010**: Verify sleep-prevention setting and inhibitor command construction.
 
 ## 7. Risks & Assumptions
 

@@ -5,6 +5,7 @@ const pty = require("node-pty");
 const execFileAsync = promisify(execFile);
 const SESSION_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/;
 const shellQuote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`;
+const inhibitedCommand = (command, name, shell) => `systemd-inhibit --what=sleep --mode=block --why=${shellQuote(`Vertex task: ${name}`)} ${shellQuote(shell)} -lc ${shellQuote(command)}`;
 
 class SessionManager {
   constructor({ shell = process.env.SHELL || "/bin/bash" } = {}) {
@@ -19,6 +20,8 @@ class SessionManager {
       throw new Error("tmux is required. Install it first (for example: sudo apt install tmux).");
     }
   }
+
+  async supportsInhibit() { try { await execFileAsync("systemd-inhibit", ["--version"]); return true; } catch { return false; } }
 
   async list() {
     await this.ensureTmux();
@@ -42,7 +45,7 @@ class SessionManager {
     }
   }
 
-  async create({ name, cwd, command, eventFile }) {
+  async create({ name, cwd, command, eventFile, preventSleep = false }) {
     if (!SESSION_NAME.test(name || "")) {
       throw new Error("Session names must be 1–63 characters: letters, numbers, ., _, or -.");
     }
@@ -51,9 +54,10 @@ class SessionManager {
     const args = ["new-session", "-d", "-s", name, "-c", cwd, this.shell];
     if (command) {
       if (!eventFile) throw new Error("An event file is required for a managed task.");
+      const runnable = preventSleep && await this.supportsInhibit() ? inhibitedCommand(command, name, this.shell) : command;
       const script = [
         "set +e",
-        command,
+        runnable,
         "vertex_exit=$?",
         'if [ "$vertex_exit" -eq 0 ]; then vertex_status=completed; else vertex_status=failed; fi',
         `printf '{"status":"%s","exitCode":%s}\\n' "$vertex_status" "$vertex_exit" > ${shellQuote(eventFile)}`,
@@ -99,4 +103,4 @@ class SessionManager {
   }
 }
 
-module.exports = { SessionManager, SESSION_NAME, shellQuote };
+module.exports = { SessionManager, SESSION_NAME, shellQuote, inhibitedCommand };

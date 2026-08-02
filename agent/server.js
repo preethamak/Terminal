@@ -22,6 +22,7 @@ const { NotificationService } = require("./notification-service");
 const { FileService } = require("./file-service");
 const { GitService } = require("./git-service");
 const { DockerService } = require("./docker-service");
+const { SettingsStore } = require("./settings-store");
 
 const PORT = Number(process.env.VERTEX_PORT || 8787);
 const HOST = process.env.VERTEX_HOST || "0.0.0.0";
@@ -38,6 +39,7 @@ const projects = new ProjectIndex();
 const files = new FileService({ projects });
 const git = new GitService({ projects });
 const docker = new DockerService();
+const settings = new SettingsStore();
 const WEB_ROOT = fs.existsSync(path.join(__dirname, "..", "dist")) ? path.join(__dirname, "..", "dist") : path.join(__dirname, "..", "web");
 
 function loadToken() {
@@ -88,7 +90,7 @@ function json(response, status, body) {
 }
 
 function health() {
-  return { ok:true, hostname:os.hostname(), platform:process.platform, uptimeSeconds:Math.round(process.uptime()), projects:projects.list().length, notification:notifications.status(), checkedAt:Date.now() };
+  return { ok:true, hostname:os.hostname(), platform:process.platform, uptimeSeconds:Math.round(process.uptime()), projects:projects.list().length, notification:notifications.status(), preventSleep:settings.read().preventSleep, checkedAt:Date.now() };
 }
 
 async function controlSession({ action, name, nextName, taskId }) {
@@ -161,6 +163,8 @@ const server = http.createServer(async (request, response) => {
   if (pathname === "/activity" && request.method === "GET") return json(response, 200, { activities:activities.list() });
   if (pathname === "/activity/read" && request.method === "POST") { const body = await readJson(request); return json(response, 200, { activities:activities.markRead(body.id || null) }); }
   if (pathname === "/device-health" && request.method === "GET") return json(response, 200, health());
+  if (pathname === "/settings" && request.method === "GET") return json(response, 200, settings.read());
+  if (pathname === "/settings" && request.method === "POST") return json(response, 200, settings.update(await readJson(request)));
   if (pathname === "/files" && request.method === "GET") { const query = new URL(request.url, "http://localhost").searchParams; return json(response, 200, await files.list({ projectPath:query.get("project"), relativePath:query.get("path") || "" })); }
   if (pathname === "/files/preview" && request.method === "GET") { const query = new URL(request.url, "http://localhost").searchParams; return json(response, 200, await files.preview({ projectPath:query.get("project"), relativePath:query.get("path") || "" })); }
   if (pathname === "/git" && request.method === "GET") { const query = new URL(request.url, "http://localhost").searchParams; return json(response, 200, await git.status({ projectPath:query.get("project") })); }
@@ -211,7 +215,7 @@ async function createTask(message) {
     id, name, sessionName:name, cwd: message.cwd, projectName: path.basename(message.cwd), branch, cli: message.cli, prompt: message.prompt || "", status: "running",
     createdAt: Date.now(), eventFile: tasks.eventFile(id), baseRef,
   };
-  await manager.create({ name, cwd: message.cwd, command: commandForTask(message), eventFile: task.eventFile });
+  await manager.create({ name, cwd: message.cwd, command: commandForTask(message), eventFile: task.eventFile, preventSleep:settings.read().preventSleep });
   tasks.add(task);
   appendEvent(task, event(task, "task_started", { cli: task.cli, prompt: task.prompt }));
   activities.add({ type:"started", taskId:id, session:name, title:"Task started", detail:name, fingerprint:`started:${id}` });
@@ -241,6 +245,8 @@ function attachClient(client) {
       if (message.type === "listActivity") return send(client, { type:"activity", requestId:message.requestId, activities:activities.list() });
       if (message.type === "readActivity") return send(client, { type:"activity", requestId:message.requestId, activities:activities.markRead(message.id || null) });
       if (message.type === "getHealth") return send(client, { type:"health", requestId:message.requestId, ...health() });
+      if (message.type === "getSettings") return send(client, { type:"settings", requestId:message.requestId, ...settings.read() });
+      if (message.type === "updateSettings") return send(client, { type:"settings", requestId:message.requestId, ...settings.update(message) });
       if (message.type === "listFiles") return send(client, { type:"files", requestId:message.requestId, ...(await files.list(message)) });
       if (message.type === "readFile") return send(client, { type:"file", requestId:message.requestId, ...(await files.preview(message)) });
       if (message.type === "gitStatus") return send(client, { type:"git", requestId:message.requestId, ...(await git.status(message)) });

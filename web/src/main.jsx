@@ -13,7 +13,7 @@ function useVertex() {
   const [token, setToken] = useState(() => localStorage.getItem("vertex.token"));
   const [relay, setRelay] = useState(() => stored("vertex.relay"));
   const [status, setStatus] = useState("Connecting to your laptop…");
-  const [data, setData] = useState({ tasks:[], sessions:[], projects:[], activities:[], health:null, docker:{ available:false, containers:[] } });
+  const [data, setData] = useState({ tasks:[], sessions:[], projects:[], activities:[], health:null, settings:{ preventSleep:true }, docker:{ available:false, containers:[] } });
   const relayClient = useRef(null); const pending = useRef(new Map()); const terminalListener = useRef(() => {});
 
   const direct = useCallback(async (path, options = {}) => {
@@ -36,14 +36,15 @@ function useVertex() {
       listFiles: () => direct(`/files?project=${encodeURIComponent(values.projectPath)}&path=${encodeURIComponent(values.relativePath || "")}`), readFile: () => direct(`/files/preview?project=${encodeURIComponent(values.projectPath)}&path=${encodeURIComponent(values.relativePath || "")}`),
       gitStatus: () => direct(`/git?project=${encodeURIComponent(values.projectPath)}`),
       listDocker: () => direct("/docker"), dockerLogs: () => direct(`/docker/log?container=${encodeURIComponent(values.container)}`),
+      getSettings: () => direct("/settings"), updateSettings: () => direct("/settings", { method:"POST", headers:{ "content-type":"application/json" }, body:JSON.stringify(values) }),
     };
     return routes[type]();
   }, [direct, relay, remote]);
   const refresh = useCallback(async () => {
     try {
-      const [sessions, tasks, initialProjects, activity, health, docker] = await Promise.all([request("list"), request("listTasks"), request("listProjects"), request("listActivity"), request("getHealth"), request("listDocker")]);
+      const [sessions, tasks, initialProjects, activity, health, docker, settings] = await Promise.all([request("list"), request("listTasks"), request("listProjects"), request("listActivity"), request("getHealth"), request("listDocker"), request("getSettings")]);
       const projects = initialProjects.projects?.length ? initialProjects : await request("refreshProjects");
-      setData({ sessions:sessions.sessions || [], tasks:tasks.tasks || [], projects:projects.projects || [], activities:activity.activities || [], health, docker }); setStatus("Laptop online");
+      setData({ sessions:sessions.sessions || [], tasks:tasks.tasks || [], projects:projects.projects || [], activities:activity.activities || [], health, settings, docker }); setStatus("Laptop online");
     } catch (error) { setStatus(error.message); }
   }, [request]);
   const discoverProjects = useCallback(async () => {
@@ -68,7 +69,7 @@ function useVertex() {
   useEffect(() => { if (token || relay) refresh(); }, [token, relay, refresh]);
   useEffect(() => { const timer = setInterval(() => { if (token || relay) refresh(); }, 12000); return () => clearInterval(timer); }, [token, relay, refresh]);
   const send = useCallback((message, directSocket) => { if (relay) relayClient.current?.send(message); else if (directSocket?.readyState === WebSocket.OPEN) directSocket.send(JSON.stringify(message)); }, [relay]);
-  const forget = useCallback(() => { localStorage.removeItem("vertex.token"); localStorage.removeItem("vertex.relay"); setToken(null); setRelay(null); setData({ tasks:[], sessions:[], projects:[], activities:[], health:null, docker:{ available:false, containers:[] } }); }, []);
+  const forget = useCallback(() => { localStorage.removeItem("vertex.token"); localStorage.removeItem("vertex.relay"); setToken(null); setRelay(null); setData({ tasks:[], sessions:[], projects:[], activities:[], health:null, settings:{ preventSleep:true }, docker:{ available:false, containers:[] } }); }, []);
   const saveToken = useCallback((value) => { localStorage.setItem("vertex.token", value); setToken(value); }, []);
   const saveRelay = useCallback((value) => { localStorage.setItem("vertex.relay", JSON.stringify(value)); setRelay(value); }, []);
   return useMemo(() => ({ token, relay, status, data, setStatus, direct, request, refresh, discoverProjects, send, terminalListener, setToken:saveToken, setRelay:saveRelay, forget }), [token, relay, status, data, direct, request, refresh, discoverProjects, send, saveToken, saveRelay, forget]);
@@ -177,11 +178,12 @@ function Sheet({ kind, vertex, selected, close, openTerminal }) {
 }
 
 function ProfilePanel({ vertex, close }) {
-  const [devices, setDevices] = useState([]); const [error, setError] = useState("");
+  const [devices, setDevices] = useState([]); const [error, setError] = useState(""); const [preventSleep, setPreventSleep] = useState(vertex.data.settings?.preventSleep ?? true);
   const load = useCallback(() => vertex.request("listDevices").then((value) => setDevices(value.devices || [])).catch((caught) => setError(caught.message)), [vertex]);
   useEffect(() => { load(); }, [load]);
   const revoke = async (device) => { if (!window.confirm(`Remove ${device.name} from Vertex? It will lose access immediately.`)) return; try { await vertex.request("revokeDevice", { id:device.id }); await load(); } catch (caught) { setError(caught.message); } };
-  return <><p className="kicker">VERTEX DEVICE</p><h2>Your private workspace</h2><div className="profile-row"><span className="avatar">A</span><div><strong>{vertex.data.health?.hostname || "Paired laptop"}</strong><small>{vertex.status} · {vertex.data.health?.projects || 0} projects</small></div><i className="status-dot running"/></div><p className="kicker">PAIRED DEVICES</p><div className="device-list">{devices.map((device) => <div key={device.id}><span>◉</span><p><strong>{device.name}</strong><small>{device.revoked ? "Revoked" : "Active"}</small></p>{!device.revoked && <button onClick={() => revoke(device)}>Revoke</button>}</div>)}</div>{error && <p className="form-error">{error}</p>}<button className="danger-button" onClick={() => { vertex.forget(); close(); }}>Forget this laptop</button></>;
+  const toggleSleep = async () => { const next = !preventSleep; setPreventSleep(next); try { await vertex.request("updateSettings", { preventSleep:next }); await vertex.refresh(); } catch (caught) { setPreventSleep(!next); setError(caught.message); } };
+  return <><p className="kicker">VERTEX DEVICE</p><h2>Your private workspace</h2><div className="profile-row"><span className="avatar">A</span><div><strong>{vertex.data.health?.hostname || "Paired laptop"}</strong><small>{vertex.status} · {vertex.data.health?.projects || 0} projects</small></div><i className="status-dot running"/></div><p className="kicker">RUNNING TASKS</p><button className={`setting-toggle ${preventSleep ? "enabled" : ""}`} onClick={toggleSleep}><span><strong>Keep laptop awake</strong><small>Only while a Vertex task is running</small></span><b>{preventSleep ? "On" : "Off"}</b></button><p className="kicker">PAIRED DEVICES</p><div className="device-list">{devices.map((device) => <div key={device.id}><span>◉</span><p><strong>{device.name}</strong><small>{device.revoked ? "Revoked" : "Active"}</small></p>{!device.revoked && <button onClick={() => revoke(device)}>Revoke</button>}</div>)}</div>{error && <p className="form-error">{error}</p>}<button className="danger-button" onClick={() => { vertex.forget(); close(); }}>Forget this laptop</button></>;
 }
 
 function ProjectsPanel({ vertex }) { const [query, setQuery] = useState(""); const [project, setProject] = useState(null); const projects = vertex.data.projects.filter((item) => item.name.toLowerCase().includes(query.toLowerCase())); if (project) return <FileBrowser project={project} vertex={vertex} close={() => setProject(null)}/>; return <><p className="kicker">WORKSPACES</p><h2>Browse your laptop</h2><input className="project-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects"/><ProjectGrid projects={projects} onOpen={setProject} onDiscover={vertex.discoverProjects} limit={Number.MAX_SAFE_INTEGER}/></>; }
