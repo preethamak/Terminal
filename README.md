@@ -6,6 +6,7 @@ Vertex proves one thing first: an Android phone can attach to a persistent `tmux
 
 - Node.js Linux agent with a token-protected HTTP/WebSocket protocol.
 - Persistent named sessions backed by `tmux`.
+- First-class real terminal launcher: choose a project, open a persistent shell, then run any command or developer CLI yourself from the phone.
 - Mobile-first PWA served by the laptop agent, with an **AI tasks first** home screen, xterm.js terminal, and mobile Ctrl/Esc/Tab/arrow key row.
 - Codex and Claude Code task launchers: pick a project, enter a task, and Vertex starts the CLI in a persistent tmux session.
 - Task lifecycle tracking: task cards move from running to completed/failed while the terminal remains available for inspection or follow-up.
@@ -84,4 +85,4 @@ Biometric unlock is also a native-wrapper feature. Keep Vertex’s pairing and r
 
 ## Protocol
 
-All WebSocket messages are JSON. Client messages: `list`, `listTasks`, `create` (`name`, `cwd`), `createTask` (`name`, `cwd`, `cli`, `prompt`), `attach` (`name`), `input` (`data`), and `resize` (`cols`, `rows`). Server messages: `ready`, `sessions`, `tasks`, `created`, `taskCreated`, `attached`, `output`, `closed`, and `error`.
+All WebSocket messages are JSON. Client messages: `list`, `listTasks`, `create`/`createSession` (`name`, `cwd`), `createTask` (`name`, `cwd`, `cli`, `prompt`), `attach` (`name`), `input` (`data`), and `resize` (`cols`, `rows`). Server messages: `ready`, `sessions`, `tasks`, `created`, `taskCreated`, `attached`, `output`, `closed`, and `error`.

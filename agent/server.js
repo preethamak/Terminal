@@ -152,11 +152,19 @@ const server = http.createServer(async (request, response) => {
     } catch (error) { return json(response, 400, { error: error.message }); }
   }
   if (!authorized(request)) return json(response, 401, { error: "Unauthorized" });
-  if (pathname === "/sessions") {
+  if (pathname === "/sessions" && request.method === "GET") {
     try {
       return json(response, 200, { sessions: await manager.list() });
     } catch (error) {
       return json(response, 503, { error: error.message });
+    }
+  }
+  if (pathname === "/sessions" && request.method === "POST") {
+    try {
+      const body = await readJson(request);
+      return json(response, 201, { session: await manager.create({ name:body.name, cwd:body.cwd }) });
+    } catch (error) {
+      return json(response, 400, { error: error.message });
     }
   }
   if (pathname === "/tasks") return json(response, 200, { tasks: tasks.sync() });
@@ -260,6 +268,7 @@ function attachClient(client) {
       if (message.type === "taskDiff") return send(client, { type: "diff", requestId: message.requestId, ...(await diffForTask(message.id)) });
       if (message.type === "reviewTask") return send(client, { type: "reviewed", requestId: message.requestId, task: tasks.review(message.id, message.decision) });
       if (message.type === "create") return send(client, { type: "created", requestId: message.requestId, session: await manager.create(message) });
+      if (message.type === "createSession") return send(client, { type: "created", requestId: message.requestId, session: await manager.create({ name:message.name, cwd:message.cwd }) });
       if (message.type === "createTask") return send(client, { type: "taskCreated", requestId: message.requestId, task: await createTask(message) });
       if (message.type === "attach") {
         terminal?.kill();
