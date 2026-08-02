@@ -16,6 +16,9 @@ const { appendEvent, event } = require("./adapters/adapter");
 const { diffForTask: diffForTaskService } = require("./diff-service");
 const { RelayConfig } = require("./relay-config");
 const { RelayClient } = require("./relay-client");
+const { ActivityStore } = require("./activity-store");
+const { TaskMonitor } = require("./task-monitor");
+const { NotificationService } = require("./notification-service");
 
 const PORT = Number(process.env.VERTEX_PORT || 8787);
 const HOST = process.env.VERTEX_HOST || "0.0.0.0";
@@ -24,6 +27,9 @@ const manager = new SessionManager();
 const execFileAsync = promisify(execFile);
 const tasks = new TaskStore();
 const devices = new DeviceStore();
+const activities = new ActivityStore();
+const notifications = new NotificationService({ activities });
+const taskMonitor = new TaskMonitor({ tasks, manager, activities });
 const relayConfig = new RelayConfig().ensure();
 const projects = new ProjectIndex();
 const WEB_ROOT = fs.existsSync(path.join(__dirname, "..", "dist")) ? path.join(__dirname, "..", "dist") : path.join(__dirname, "..", "web");
@@ -75,6 +81,25 @@ function json(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
+function health() {
+  return { ok:true, hostname:os.hostname(), platform:process.platform, uptimeSeconds:Math.round(process.uptime()), projects:projects.list().length, notification:notifications.status(), checkedAt:Date.now() };
+}
+
+async function controlSession({ action, name, nextName, taskId }) {
+  if (action === "stop") {
+    const result = await manager.kill(name); const task = tasks.findBySession(name); if (task) tasks.update(task.id, { status:"stopped", finishedAt:Date.now(), attention:null });
+    activities.add({ type:"session_stopped", taskId:task?.id || null, session:name, title:"Session stopped", detail:name, fingerprint:`stopped:${name}:${Date.now()}` }); return result;
+  }
+  if (action === "rename") {
+    const result = await manager.rename(name, nextName); const task = tasks.findBySession(name); if (task) tasks.update(task.id, { name:nextName, sessionName:nextName }); return result;
+  }
+  if (action === "pin" || action === "archive") {
+    if (!taskId) throw new Error("A task is required.");
+    return action === "pin" ? tasks.pin(taskId) : tasks.archive(taskId);
+  }
+  throw new Error("Unsupported session action.");
+}
+
 function sendWebFile(request, response) {
   const pathname = new URL(request.url, "http://localhost").pathname;
   const requested = pathname === "/" ? "index.html" : pathname.replace(/^\//, "");
@@ -108,7 +133,7 @@ function sendVendorFile(request, response) {
 
 const server = http.createServer(async (request, response) => {
   const pathname = new URL(request.url, "http://localhost").pathname;
-  if (pathname === "/health") return json(response, 200, { ok: true });
+  if (pathname === "/health") return json(response, 200, { ok:true });
   if (request.method === "GET" && sendVendorFile(request, response)) return;
   if (request.method === "GET" && sendWebFile(request, response)) return;
   if (request.method === "POST" && pathname === "/pair") {
@@ -127,6 +152,14 @@ const server = http.createServer(async (request, response) => {
     }
   }
   if (pathname === "/tasks") return json(response, 200, { tasks: tasks.sync() });
+  if (pathname === "/activity" && request.method === "GET") return json(response, 200, { activities:activities.list() });
+  if (pathname === "/activity/read" && request.method === "POST") { const body = await readJson(request); return json(response, 200, { activities:activities.markRead(body.id || null) }); }
+  if (pathname === "/device-health" && request.method === "GET") return json(response, 200, health());
+  if (pathname === "/devices" && request.method === "GET") return json(response, 200, { devices: devices.read().map(({ token: _token, relayKey: _relayKey, ...device }) => device) });
+  const revokeMatch = pathname.match(/^\/devices\/([a-f0-9-]+)\/revoke$/);
+  if (request.method === "POST" && revokeMatch) { devices.revoke(revokeMatch[1]); activities.add({ type:"device_revoked", title:"Device access revoked", detail:revokeMatch[1].slice(0, 8), fingerprint:`revoked:${revokeMatch[1]}` }); return json(response, 200, { ok:true }); }
+  const sessionActionMatch = pathname.match(/^\/sessions\/([^/]+)\/action$/);
+  if (request.method === "POST" && sessionActionMatch) { const body = await readJson(request); return json(response, 200, { result:await controlSession({ ...body, name:decodeURIComponent(sessionActionMatch[1]) }) }); }
   if (pathname === "/projects" && request.method === "GET") return json(response, 200, { projects: projects.list() });
   if (pathname === "/projects/refresh" && request.method === "POST") return json(response, 200, { projects: await projects.refresh() });
   const diffMatch = pathname.match(/^\/tasks\/([a-f0-9-]+)\/diff$/);
@@ -137,7 +170,6 @@ const server = http.createServer(async (request, response) => {
   if (request.method === "POST" && reviewMatch) {
     try { const body = await readJson(request); return json(response, 200, { task: tasks.review(reviewMatch[1], body.decision) }); } catch (error) { return json(response, 400, { error: error.message }); }
   }
-  if (pathname === "/devices") return json(response, 200, { devices: devices.read().map(({ token: _token, relayKey: _relayKey, ...device }) => device) });
   return json(response, 404, { error: "Not found" });
 });
 
@@ -165,12 +197,13 @@ async function createTask(message) {
   try { ({ stdout: baseRef } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: message.cwd })); baseRef = baseRef.trim(); } catch { /* non-git project */ }
   try { ({ stdout: branch } = await execFileAsync("git", ["branch", "--show-current"], { cwd: message.cwd })); branch = branch.trim() || "detached"; } catch { /* non-git project */ }
   const task = {
-    id, name, cwd: message.cwd, projectName: path.basename(message.cwd), branch, cli: message.cli, prompt: message.prompt || "", status: "running",
+    id, name, sessionName:name, cwd: message.cwd, projectName: path.basename(message.cwd), branch, cli: message.cli, prompt: message.prompt || "", status: "running",
     createdAt: Date.now(), eventFile: tasks.eventFile(id), baseRef,
   };
   await manager.create({ name, cwd: message.cwd, command: commandForTask(message), eventFile: task.eventFile });
   tasks.add(task);
   appendEvent(task, event(task, "task_started", { cli: task.cli, prompt: task.prompt }));
+  activities.add({ type:"started", taskId:id, session:name, title:"Task started", detail:name, fingerprint:`started:${id}` });
   projects.touch(message.cwd);
   return task;
 }
@@ -181,7 +214,7 @@ async function diffForTask(id) {
 }
 
 function attachClient(client) {
-  let terminal;
+  let terminal; let attachedName = null;
   send(client, { type: "ready" });
 
   client.on("message", async (raw) => {
@@ -194,6 +227,12 @@ function attachClient(client) {
     try {
       if (message.type === "list") return send(client, { type: "sessions", requestId: message.requestId, sessions: await manager.list() });
       if (message.type === "listTasks") return send(client, { type: "tasks", requestId: message.requestId, tasks: tasks.sync() });
+      if (message.type === "listActivity") return send(client, { type:"activity", requestId:message.requestId, activities:activities.list() });
+      if (message.type === "readActivity") return send(client, { type:"activity", requestId:message.requestId, activities:activities.markRead(message.id || null) });
+      if (message.type === "getHealth") return send(client, { type:"health", requestId:message.requestId, ...health() });
+      if (message.type === "listDevices") return send(client, { type:"devices", requestId:message.requestId, devices:devices.read().map(({ token: _token, relayKey: _relayKey, ...device }) => device) });
+      if (message.type === "revokeDevice") { devices.revoke(message.id); return send(client, { type:"revoked", requestId:message.requestId, id:message.id }); }
+      if (message.type === "sessionAction") return send(client, { type:"sessionAction", requestId:message.requestId, result:await controlSession(message) });
       if (message.type === "listProjects") return send(client, { type: "projects", requestId: message.requestId, projects: projects.list() });
       if (message.type === "refreshProjects") return send(client, { type: "projects", requestId: message.requestId, projects: await projects.refresh() });
       if (message.type === "taskDiff") return send(client, { type: "diff", requestId: message.requestId, ...(await diffForTask(message.id)) });
@@ -202,6 +241,7 @@ function attachClient(client) {
       if (message.type === "createTask") return send(client, { type: "taskCreated", requestId: message.requestId, task: await createTask(message) });
       if (message.type === "attach") {
         terminal?.kill();
+        attachedName = message.name;
         const snapshot = await manager.snapshot(message.name);
         const sequencer = outputSequencer((event) => send(client, event));
         send(client, { type: "terminalSnapshot", sequence: sequencer.current(), data: snapshot });
@@ -211,7 +251,7 @@ function attachClient(client) {
         });
         return send(client, { type: "attached", name: message.name });
       }
-      if (message.type === "input" && terminal) return terminal.write(String(message.data || ""));
+      if (message.type === "input" && terminal) { const task = tasks.findBySession(attachedName); if (task?.attention) tasks.update(task.id, { attention:null, status:"running" }); return terminal.write(String(message.data || "")); }
       if (message.type === "resize" && terminal) {
         const size = validateResize(message);
         return terminal.resize(size.cols, size.rows);
@@ -225,6 +265,9 @@ function attachClient(client) {
 }
 
 websocket.on("connection", attachClient);
+
+void taskMonitor.poll().catch(() => {});
+setInterval(() => { void taskMonitor.poll().catch(() => {}); }, 5000).unref();
 
 // The relay connection is optional during development. Once VERTEX_RELAY_URL is set,
 // the laptop initiates this outbound connection and no phone needs a direct laptop URL.

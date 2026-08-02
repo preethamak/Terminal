@@ -20,11 +20,21 @@ class TaskStore {
 
   add(task) { const tasks = this.read(); tasks.push(task); this.write(tasks); return task; }
 
-  list() { return this.read().sort((a, b) => b.createdAt - a.createdAt); }
+  update(id, patch) {
+    const tasks = this.read(); const task = tasks.find((entry) => entry.id === id);
+    if (!task) throw new Error("Task not found.");
+    Object.assign(task, patch); this.write(tasks); return task;
+  }
+
+  archive(id, archived = true) { return this.update(id, { archived:Boolean(archived), archivedAt:archived ? Date.now() : null }); }
+  pin(id, pinned = true) { return this.update(id, { pinned:Boolean(pinned) }); }
+
+  list({ includeArchived = false } = {}) { return this.read().filter((task) => includeArchived || !task.archived).sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt - a.createdAt); }
 
   eventFile(id) { return path.join(this.events, `${id}.json`); }
 
   find(id) { return this.read().find((task) => task.id === id); }
+  findBySession(name) { return this.read().find((task) => (task.sessionName || task.name) === name); }
 
   review(id, decision) {
     if (!['approved', 'needs_changes'].includes(decision)) throw new Error("Invalid review decision.");
@@ -33,7 +43,7 @@ class TaskStore {
     task.review = { decision, reviewedAt: Date.now() }; this.write(tasks); return task;
   }
 
-  sync() {
+  sync({ includeArchived = false } = {}) {
     const tasks = this.read(); let changed = false;
     for (const task of tasks) {
       if (task.status !== "running") continue;
@@ -46,7 +56,7 @@ class TaskStore {
       } catch (error) { if (error.code !== "ENOENT") throw error; }
     }
     if (changed) this.write(tasks);
-    return tasks.sort((a, b) => b.createdAt - a.createdAt);
+    return tasks.filter((task) => includeArchived || !task.archived).sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.createdAt - a.createdAt);
   }
 }
 

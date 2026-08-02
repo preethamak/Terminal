@@ -72,6 +72,18 @@ class SessionManager {
     return stdout;
   }
 
+  async rename(name, nextName) {
+    if (!SESSION_NAME.test(name || "") || !SESSION_NAME.test(nextName || "")) throw new Error("Session names must be 1–63 letters, numbers, ., _, or -.");
+    await execFileAsync("tmux", ["rename-session", "-t", name, nextName]);
+    return { name:nextName };
+  }
+
+  async kill(name) {
+    if (!SESSION_NAME.test(name || "")) throw new Error("Invalid session name.");
+    await execFileAsync("tmux", ["kill-session", "-t", name]);
+    return { name, stopped:true };
+  }
+
   attach(name, { onData, onExit }) {
     if (!SESSION_NAME.test(name || "")) throw new Error("Invalid session name.");
     const terminal = pty.spawn("tmux", ["attach-session", "-t", name], {

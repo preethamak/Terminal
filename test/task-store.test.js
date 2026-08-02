@@ -15,3 +15,11 @@ test("task store records a terminal task completing", () => {
   assert.equal(updated.exitCode, 0);
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("task store pins and archives a task without deleting its history", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "vertex-task-actions-")); const store = new TaskStore(root);
+  store.add({ id:"pinned", status:"running", createdAt:1, eventFile:store.eventFile("pinned") });
+  store.pin("pinned"); assert.equal(store.list()[0].pinned, true);
+  store.archive("pinned"); assert.equal(store.list().length, 0); assert.equal(store.list({ includeArchived:true }).length, 1);
+  fs.rmSync(root, { recursive:true, force:true });
+});

@@ -11,6 +11,6 @@ test("encrypted relay frames round-trip without retaining terminal plaintext", (
 
 test("encrypted relay frames reject a modified authentication tag", () => {
   const key = newKey(); const frame = encrypt(key, { type: "output", data: "private terminal text" });
-  const last = frame.t.at(-1); frame.t = `${frame.t.slice(0, -1)}${last === "A" ? "B" : "A"}`;
+  const first = frame.t[0]; frame.t = `${first === "A" ? "B" : "A"}${frame.t.slice(1)}`;
   assert.throws(() => decrypt(key, frame));
 });
