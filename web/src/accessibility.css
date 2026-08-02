@@ -19,3 +19,5 @@
 .terminal-wrap .xterm-viewport { overflow-y:auto !important; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
 .terminal-follow { position:absolute; z-index:2; right:20px; bottom:26px; padding:8px 11px; border:1px solid #4a5ca3; border-radius:999px; color:#e7ebff; background:#202949e8; box-shadow:0 7px 20px #0008; font-size:11px; font-weight:800; }
 .terminal-hint { position:absolute; left:50%; bottom:7px; transform:translateX(-50%); margin:0; color:#6f7a95; font-size:9px; pointer-events:none; }
+.project-scan { margin:0; }
+.project-discover-button { margin:14px 0 -2px; }

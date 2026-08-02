@@ -259,6 +259,7 @@ if (relayConfig.relayUrl) {
 
 server.listen(PORT, HOST, () => {
   console.log(`Vertex agent listening on http://${HOST}:${PORT}`);
+  void projects.refresh().then((found) => console.log(`Vertex indexed ${found.length} Git projects from this laptop.`)).catch((error) => console.error(`Vertex could not index projects: ${error.message}`));
   const pairCode = devices.createChallenge();
   let publicUrl = process.env.VERTEX_PAIR_URL;
   if (relayConfig.relayUrl) {
