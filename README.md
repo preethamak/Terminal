@@ -7,7 +7,7 @@ Vertex proves one thing first: an Android phone can attach to a persistent `tmux
 - Node.js Linux agent with a token-protected HTTP/WebSocket protocol.
 - Persistent named sessions backed by `tmux`.
 - First-class real terminal launcher: choose a project, open a persistent shell, then run any command or developer CLI yourself from the phone.
-- Mobile-first PWA served by the laptop agent, with an **AI tasks first** home screen, xterm.js terminal, and mobile Ctrl/Esc/Tab/arrow key row.
+- Mobile-first PWA served by the laptop agent, with an **AI tasks first** home screen, xterm.js terminal, mobile Ctrl/Esc/Tab/pipe/slash/arrow key row, and terminal pinch/text-size zoom.
 - Codex and Claude Code task launchers: pick a project, enter a task, and Vertex starts the CLI in a persistent tmux session.
 - Task lifecycle tracking: task cards move from running to completed/failed while the terminal remains available for inspection or follow-up.
 - Local AI attention detection: Vertex watches managed tmux tasks on the laptop for approval-like prompts and surfaces an encrypted **needs input** card on the phone. The terminal remains the source of truth.
