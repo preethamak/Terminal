@@ -2,3 +2,10 @@
 .pair-icon { color: #edf0ff; background: #46558b; }
 .welcome-foot { color: #a5afc7; }
 .bottom-nav button { color: #aab5d0; }
+.scan-button { display:flex; align-items:center; justify-content:space-between; width:100%; margin-top:12px; padding:13px 14px; border:1px solid #4a5ca3; border-radius:12px; color:#dce3ff; background:#202849; font-weight:750; }
+.scan-button span { font-size:21px; }
+.scanner-backdrop { position:fixed; inset:0; z-index:20; display:grid; place-items:center; padding:20px; background:#050711e8; backdrop-filter:blur(8px); }
+.scanner-card { position:relative; width:min(420px,100%); padding:27px 20px 22px; border:1px solid #404a67; border-radius:23px; background:#151a28; box-shadow:0 25px 70px #000a; }
+.scanner-card h2 { margin:0 0 15px; font-size:25px; letter-spacing:-1px; }
+.scanner-card p:not(.kicker) { margin:13px 2px 0; color:#b7c1d8; font-size:13px; line-height:1.45; }
+.scanner-video { display:block; width:100%; aspect-ratio:1; object-fit:cover; border-radius:15px; background:#080b13; }
