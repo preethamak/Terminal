@@ -26,6 +26,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **REQ-008**: Browse and preview files only within discovered Git project roots from the mobile app.
 - **REQ-009**: Display read-only Git branch and change information for a discovered project before opening its terminal.
 - **REQ-010**: Display read-only Docker container state and bounded container logs from the mobile app.
+- **REQ-011**: Install the laptop agent as a user service that preserves the configured encrypted relay URL across reboot and login.
 - **SEC-001**: Do not expose source files, terminal output, or project paths to the relay in plaintext.
 - **SEC-002**: Device revocation must prevent future relay-frame decryption for the revoked device.
 - **CON-001**: Firebase push delivery cannot be enabled without Firebase project credentials supplied by the account owner.
@@ -102,6 +103,16 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 | TASK-026 | Add Docker summary and log preview views in `web/src/main.jsx`. | ✅ | 2026-08-02 |
 | TASK-027 | Add Docker styles and service tests, then run the release check. | ✅ | 2026-08-02 |
 
+### Implementation Phase 7
+
+- GOAL-007: Make the personal laptop agent persist without manually running `npm start`.
+
+| Task | Description | Completed | Date |
+|---|---|---:|---|
+| TASK-028 | Update `scripts/install-linux.sh` to validate relay configuration, write a mode-0600 environment file, and create a systemd user service that reads it. | ✅ | 2026-08-02 |
+| TASK-029 | Document one-command Arch/Linux installation, status, logs, update, and uninstall steps in `README.md`. | ✅ | 2026-08-02 |
+| TASK-030 | Validate shell syntax and run the application release check. | ✅ | 2026-08-02 |
+
 ## 3. Alternatives
 
 - **ALT-001**: Build a separate proprietary AI agent. Rejected because Vertex must run existing CLI agents unchanged.
@@ -126,6 +137,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **FILE-008**: `agent/file-service.js` constrains project file access.
 - **FILE-009**: `agent/git-service.js` provides project-constrained Git metadata.
 - **FILE-010**: `agent/docker-service.js` provides allowlisted Docker observations.
+- **FILE-011**: `scripts/install-linux.sh` creates the persistent user service.
 
 ## 6. Testing
 
@@ -137,6 +149,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **TEST-006**: Verify project-root traversal rejection and binary/oversized preview handling.
 - **TEST-007**: Verify Git metadata is available only to approved projects and contains no write operation.
 - **TEST-008**: Verify Docker command arguments are allowlisted and log output is bounded.
+- **TEST-009**: Verify installer shell syntax and required environment validation.
 
 ## 7. Risks & Assumptions
 

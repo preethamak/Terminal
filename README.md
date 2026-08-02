@@ -58,8 +58,14 @@ The printed QR then pairs your phone through Vertex’s encrypted relay. No Tail
 For a user service, run:
 
 ```bash
+VERTEX_RELAY_URL=wss://vertex-relay.arc-terminal.workers.dev/v1/connect \
+VERTEX_APP_URL=https://vertex-cyan-phi.vercel.app \
 bash scripts/install-linux.sh
 ```
+
+This installs a `systemd --user` service and keeps the two public URLs in `~/.config/vertex/agent.env` with owner-only permissions. Vertex starts automatically when you log in, restarts if it fails, and preserves the existing device pairing and tmux sessions. Check it with `systemctl --user status vertex-agent.service`, follow its logs with `journalctl --user -u vertex-agent.service -f`, and stop it with `systemctl --user disable --now vertex-agent.service`.
+
+To keep the service available after you log out, run `loginctl enable-linger $USER` once. This is optional; it only controls the user service lifecycle and does not wake a sleeping laptop.
 
 ## Open it on Android
 
