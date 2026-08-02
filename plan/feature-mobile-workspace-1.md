@@ -30,6 +30,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **REQ-012**: Allow the user to keep the laptop awake only while Vertex-managed tasks execute, without implementing remote wake.
 - **REQ-013**: Let the user create and immediately open a persistent raw terminal in a selected laptop project without launching an AI task.
 - **REQ-014**: Make the real terminal practical on a phone with a Ctrl modifier, common shell symbols, and readable zoom controls.
+- **REQ-015**: Let the user switch between their persistent laptop terminals without leaving the live terminal view.
 - **SEC-001**: Do not expose source files, terminal output, or project paths to the relay in plaintext.
 - **SEC-002**: Device revocation must prevent future relay-frame decryption for the revoked device.
 - **CON-001**: Firebase push delivery cannot be enabled without Firebase project credentials supplied by the account owner.
@@ -148,6 +149,15 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 | TASK-040 | Add a one-shot Ctrl modifier and pipe/slash key affordances that work for hardware and mobile keyboards. | ✅ | 2026-08-02 |
 | TASK-041 | Add in-terminal text size controls and two-finger pinch zoom without disrupting terminal scroll gestures. | ✅ | 2026-08-02 |
 | TASK-042 | Add mobile terminal interaction styles, run the full release check, and publish the change. | ✅ | 2026-08-02 |
+
+### Implementation Phase 11
+
+- GOAL-011: Make multiple terminal sessions fast to use from the phone.
+
+| Task | Description | Completed | Date |
+|---|---|---:|---|
+| TASK-043 | Add a live-terminal session switcher backed by the existing encrypted session list. | ✅ | 2026-08-02 |
+| TASK-044 | Add compact mobile styles and run the full release check before publishing. | ✅ | 2026-08-02 |
 
 ## 3. Alternatives
 
