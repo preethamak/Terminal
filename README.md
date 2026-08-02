@@ -69,6 +69,12 @@ bash scripts/install-linux.sh
 
 This installs a `systemd --user` service and keeps the two public URLs in `~/.config/vertex/agent.env` with owner-only permissions. Vertex starts automatically when you log in, restarts if it fails, and preserves the existing device pairing and tmux sessions. Check it with `systemctl --user status vertex-agent.service`, follow its logs with `journalctl --user -u vertex-agent.service -f`, and stop it with `systemctl --user disable --now vertex-agent.service`.
 
+To pair a phone after installing the service, run this one command on the laptop. It restarts the agent and prints a fresh QR that is valid for ten minutes:
+
+```bash
+cd ~/vertex && npm run pair
+```
+
 To keep the service available after you log out, run `loginctl enable-linger $USER` once. This is optional; it only controls the user service lifecycle and does not wake a sleeping laptop.
 
 ## Open it on Android

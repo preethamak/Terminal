@@ -32,6 +32,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **REQ-014**: Make the real terminal practical on a phone with a Ctrl modifier, common shell symbols, and readable zoom controls.
 - **REQ-015**: Let the user switch between their persistent laptop terminals without leaving the live terminal view.
 - **REQ-016**: Show setup status and self-service checks in the app so personal-beta users can test their own connection and activity delivery.
+- **REQ-017**: Make first-time pairing self-explanatory from the welcome screen and provide one laptop command that renews and displays the production QR.
 - **SEC-001**: Do not expose source files, terminal output, or project paths to the relay in plaintext.
 - **SEC-002**: Device revocation must prevent future relay-frame decryption for the revoked device.
 - **CON-001**: Firebase push delivery cannot be enabled without Firebase project credentials supplied by the account owner.
@@ -169,6 +170,17 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 | TASK-045 | Add authenticated encrypted/direct test-activity creation on the laptop agent. | ✅ | 2026-08-02 |
 | TASK-046 | Add a Setup & test screen with connection, terminal, project, activity, push, and biometric readiness states. | ✅ | 2026-08-02 |
 | TASK-047 | Add a self-service in-app activity test, document its scope, and run the full release check. | ✅ | 2026-08-02 |
+
+### Implementation Phase 13
+
+- GOAL-013: Remove pairing ambiguity for a background laptop agent.
+
+| Task | Description | Completed | Date |
+|---|---|---:|---|
+| TASK-048 | Persist the short-lived, owner-only pairing URL from the running laptop agent. | ✅ | 2026-08-02 |
+| TASK-049 | Add `npm run pair` to restart the user agent and render a new QR in the laptop terminal. | ✅ | 2026-08-02 |
+| TASK-050 | Replace ambiguous welcome copy with a visible two-step pairing guide and copy action. | ✅ | 2026-08-02 |
+| TASK-051 | Add shell/documentation checks and run the full release check. | ✅ | 2026-08-02 |
 
 ## 3. Alternatives
 

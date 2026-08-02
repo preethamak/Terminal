@@ -27,6 +27,7 @@ const { SettingsStore } = require("./settings-store");
 const PORT = Number(process.env.VERTEX_PORT || 8787);
 const HOST = process.env.VERTEX_HOST || "0.0.0.0";
 const TOKEN_FILE = process.env.VERTEX_TOKEN_FILE || path.join(process.env.HOME || ".", ".vertex", "token");
+const PAIRING_FILE = path.join(process.env.HOME || ".", ".vertex", "pairing.json");
 const manager = new SessionManager();
 const execFileAsync = promisify(execFile);
 const tasks = new TaskStore();
@@ -87,6 +88,12 @@ function readJson(request) {
 function json(response, status, body) {
   response.writeHead(status, { "content-type": "application/json" });
   response.end(JSON.stringify(body));
+}
+
+function writePairingUrl(url) {
+  fs.mkdirSync(path.dirname(PAIRING_FILE), { recursive:true, mode:0o700 });
+  fs.writeFileSync(PAIRING_FILE, `${JSON.stringify({ url, createdAt:Date.now(), expiresAt:Date.now() + 10 * 60 * 1000 })}\n`, { mode:0o600 });
+  fs.chmodSync(PAIRING_FILE, 0o600);
 }
 
 function health() {
@@ -347,6 +354,7 @@ server.listen(PORT, HOST, () => {
     const relayPair = Buffer.from(JSON.stringify({ v: 1, relay: relayConfig.relayUrl, machine: relayConfig.machineId, code: pairCode, key: devices.pairingKey(pairCode) })).toString("base64url");
     const appUrl = process.env.VERTEX_APP_URL || "https://app.vertex.example";
     const pairUrl = `${appUrl.replace(/\/$/, "")}/?relayPair=${relayPair}`;
+    writePairingUrl(pairUrl);
     console.log(`Vertex relay pairing QR (valid for 10 minutes): ${pairUrl}`);
     try { require("node:child_process").execFileSync("qrencode", ["-t", "ANSIUTF8", pairUrl], { stdio: "inherit" }); } catch { console.log("Install qrencode to display that URL as a terminal QR code."); }
     console.log("Vertex relay mode: the laptop makes an outbound encrypted connection; no Tailscale is used.");
@@ -360,6 +368,7 @@ server.listen(PORT, HOST, () => {
     if (address) publicUrl = `http://${address}:${PORT}`;
   }
   const pairUrl = `${publicUrl.replace(/\/$/, "")}/?pair=${pairCode}`;
+  writePairingUrl(pairUrl);
   console.log(`Pairing QR URL (valid for 10 minutes): ${pairUrl}`);
   console.log(`Bootstrap token (development fallback): ${token}`);
   try { require("node:child_process").execFileSync("qrencode", ["-t", "ANSIUTF8", pairUrl], { stdio: "inherit" }); } catch { console.log("Install qrencode to display that URL as a terminal QR code."); }

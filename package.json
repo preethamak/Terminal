@@ -8,6 +8,7 @@
     "build": "vite build",
     "dev": "vite --host 0.0.0.0",
     "relay:dev": "node relay/dev-server.js",
+    "pair": "bash scripts/pair-linux.sh",
     "test": "node --test --test-concurrency=1"
   },
   "keywords": [],
