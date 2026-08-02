@@ -181,6 +181,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 | TASK-049 | Add `npm run pair` to restart the user agent and render a new QR in the laptop terminal. | ✅ | 2026-08-02 |
 | TASK-050 | Replace ambiguous welcome copy with a visible two-step pairing guide and copy action. | ✅ | 2026-08-02 |
 | TASK-051 | Add shell/documentation checks and run the full release check. | ✅ | 2026-08-02 |
+| TASK-052 | Add a no-camera pairing-link fallback and clear wrapper-permission guidance. | ✅ | 2026-08-02 |
 
 ## 3. Alternatives
 
