@@ -9,3 +9,6 @@
 .scanner-card h2 { margin:0 0 15px; font-size:25px; letter-spacing:-1px; }
 .scanner-card p:not(.kicker) { margin:13px 2px 0; color:#b7c1d8; font-size:13px; line-height:1.45; }
 .scanner-video { display:block; width:100%; aspect-ratio:1; object-fit:cover; border-radius:15px; background:#080b13; }
+.qr-photo-input { display:none; }
+.scan-photo-button { display:flex; align-items:center; justify-content:space-between; width:100%; margin-top:13px; padding:12px 13px; border:1px solid #4a5879; border-radius:12px; color:#e6eaff; background:#252c3e; font-weight:750; }
+.scan-photo-button span { font-size:19px; }
