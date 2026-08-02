@@ -24,6 +24,8 @@ if [[ -z "$pair_url" ]]; then
 fi
 
 echo "Scan this QR in Vertex on your phone. It expires in 10 minutes."
+echo "Or open this pairing link on your phone:"
+echo "$pair_url"
 if command -v qrencode >/dev/null; then
   qrencode -t ANSIUTF8 "$pair_url"
 else
