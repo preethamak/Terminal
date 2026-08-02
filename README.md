@@ -14,6 +14,7 @@ Vertex proves one thing first: an Android phone can attach to a persistent `tmux
 - Project search, Git diff review, task pin/archive, session rename/stop, terminal search/copy/paste, laptop health, and paired-device revocation.
 - Project file browser with mobile text previews. It is constrained to discovered Git project roots, hides hidden/dependency folders, and refuses binary or oversized files.
 - Read-only Git workspace view: branch, changed-file list, and diff summary. Commits and pushes remain deliberate terminal actions.
+- Read-only Docker view: container state and bounded recent logs. Container changes remain deliberate terminal actions.
 - Android reconnects to the same session after the app is closed; the agent never kills the underlying `tmux` session.
 - Ten-minute QR pairing creates a revocable per-device token.
 - Git diff review for each managed task, with an approve/needs-changes review record.

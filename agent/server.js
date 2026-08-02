@@ -21,6 +21,7 @@ const { TaskMonitor } = require("./task-monitor");
 const { NotificationService } = require("./notification-service");
 const { FileService } = require("./file-service");
 const { GitService } = require("./git-service");
+const { DockerService } = require("./docker-service");
 
 const PORT = Number(process.env.VERTEX_PORT || 8787);
 const HOST = process.env.VERTEX_HOST || "0.0.0.0";
@@ -36,6 +37,7 @@ const relayConfig = new RelayConfig().ensure();
 const projects = new ProjectIndex();
 const files = new FileService({ projects });
 const git = new GitService({ projects });
+const docker = new DockerService();
 const WEB_ROOT = fs.existsSync(path.join(__dirname, "..", "dist")) ? path.join(__dirname, "..", "dist") : path.join(__dirname, "..", "web");
 
 function loadToken() {
@@ -162,6 +164,8 @@ const server = http.createServer(async (request, response) => {
   if (pathname === "/files" && request.method === "GET") { const query = new URL(request.url, "http://localhost").searchParams; return json(response, 200, await files.list({ projectPath:query.get("project"), relativePath:query.get("path") || "" })); }
   if (pathname === "/files/preview" && request.method === "GET") { const query = new URL(request.url, "http://localhost").searchParams; return json(response, 200, await files.preview({ projectPath:query.get("project"), relativePath:query.get("path") || "" })); }
   if (pathname === "/git" && request.method === "GET") { const query = new URL(request.url, "http://localhost").searchParams; return json(response, 200, await git.status({ projectPath:query.get("project") })); }
+  if (pathname === "/docker" && request.method === "GET") return json(response, 200, await docker.list());
+  if (pathname === "/docker/log" && request.method === "GET") { const query = new URL(request.url, "http://localhost").searchParams; return json(response, 200, await docker.logs({ container:query.get("container") })); }
   if (pathname === "/devices" && request.method === "GET") return json(response, 200, { devices: devices.read().map(({ token: _token, relayKey: _relayKey, ...device }) => device) });
   const revokeMatch = pathname.match(/^\/devices\/([a-f0-9-]+)\/revoke$/);
   if (request.method === "POST" && revokeMatch) { devices.revoke(revokeMatch[1]); activities.add({ type:"device_revoked", title:"Device access revoked", detail:revokeMatch[1].slice(0, 8), fingerprint:`revoked:${revokeMatch[1]}` }); return json(response, 200, { ok:true }); }
@@ -240,6 +244,8 @@ function attachClient(client) {
       if (message.type === "listFiles") return send(client, { type:"files", requestId:message.requestId, ...(await files.list(message)) });
       if (message.type === "readFile") return send(client, { type:"file", requestId:message.requestId, ...(await files.preview(message)) });
       if (message.type === "gitStatus") return send(client, { type:"git", requestId:message.requestId, ...(await git.status(message)) });
+      if (message.type === "listDocker") return send(client, { type:"docker", requestId:message.requestId, ...(await docker.list()) });
+      if (message.type === "dockerLogs") return send(client, { type:"dockerLogs", requestId:message.requestId, ...(await docker.logs(message)) });
       if (message.type === "listDevices") return send(client, { type:"devices", requestId:message.requestId, devices:devices.read().map(({ token: _token, relayKey: _relayKey, ...device }) => device) });
       if (message.type === "revokeDevice") { devices.revoke(message.id); return send(client, { type:"revoked", requestId:message.requestId, id:message.id }); }
       if (message.type === "sessionAction") return send(client, { type:"sessionAction", requestId:message.requestId, result:await controlSession(message) });

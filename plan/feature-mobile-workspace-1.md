@@ -25,6 +25,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **REQ-007**: Persist in-app notifications for completed, failed, and attention-required tasks.
 - **REQ-008**: Browse and preview files only within discovered Git project roots from the mobile app.
 - **REQ-009**: Display read-only Git branch and change information for a discovered project before opening its terminal.
+- **REQ-010**: Display read-only Docker container state and bounded container logs from the mobile app.
 - **SEC-001**: Do not expose source files, terminal output, or project paths to the relay in plaintext.
 - **SEC-002**: Device revocation must prevent future relay-frame decryption for the revoked device.
 - **CON-001**: Firebase push delivery cannot be enabled without Firebase project credentials supplied by the account owner.
@@ -90,6 +91,17 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 | TASK-022 | Add a branch, changed-file, and diff-summary view in `web/src/main.jsx`. | ✅ | 2026-08-02 |
 | TASK-023 | Add Git workspace styles and service tests, then run the release check. | ✅ | 2026-08-02 |
 
+### Implementation Phase 6
+
+- GOAL-006: Add read-only Docker observability for a laptop running Docker.
+
+| Task | Description | Completed | Date |
+|---|---|---:|---|
+| TASK-024 | Add a Docker availability, container-list, and bounded-log service in `agent/docker-service.js`. | ✅ | 2026-08-02 |
+| TASK-025 | Add encrypted/direct Docker handlers in `agent/server.js`. | ✅ | 2026-08-02 |
+| TASK-026 | Add Docker summary and log preview views in `web/src/main.jsx`. | ✅ | 2026-08-02 |
+| TASK-027 | Add Docker styles and service tests, then run the release check. | ✅ | 2026-08-02 |
+
 ## 3. Alternatives
 
 - **ALT-001**: Build a separate proprietary AI agent. Rejected because Vertex must run existing CLI agents unchanged.
@@ -113,6 +125,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **FILE-007**: `README.md` documents Firebase and Nativine setup.
 - **FILE-008**: `agent/file-service.js` constrains project file access.
 - **FILE-009**: `agent/git-service.js` provides project-constrained Git metadata.
+- **FILE-010**: `agent/docker-service.js` provides allowlisted Docker observations.
 
 ## 6. Testing
 
@@ -123,6 +136,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **TEST-005**: Run `npm test`, `npm run build`, and browser/mobile regression checks.
 - **TEST-006**: Verify project-root traversal rejection and binary/oversized preview handling.
 - **TEST-007**: Verify Git metadata is available only to approved projects and contains no write operation.
+- **TEST-008**: Verify Docker command arguments are allowlisted and log output is bounded.
 
 ## 7. Risks & Assumptions
 
