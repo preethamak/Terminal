@@ -23,6 +23,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **REQ-005**: Display laptop connectivity and lightweight health metadata.
 - **REQ-006**: Provide paired-device listing and revocation from the phone.
 - **REQ-007**: Persist in-app notifications for completed, failed, and attention-required tasks.
+- **REQ-008**: Browse and preview files only within discovered Git project roots from the mobile app.
 - **SEC-001**: Do not expose source files, terminal output, or project paths to the relay in plaintext.
 - **SEC-002**: Device revocation must prevent future relay-frame decryption for the revoked device.
 - **CON-001**: Firebase push delivery cannot be enabled without Firebase project credentials supplied by the account owner.
@@ -65,6 +66,18 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 | TASK-013 | Add documented Firebase and Nativine configuration instructions without embedding credentials in the repository. | ✅ | 2026-08-02 |
 | TASK-014 | Run tests, production build, relay smoke checks, and commit the completed implementation. | ✅ | 2026-08-02 |
 
+### Implementation Phase 4
+
+- GOAL-004: Add a mobile project file browser without granting unrestricted laptop filesystem access.
+
+| Task | Description | Completed | Date |
+|---|---|---:|---|
+| TASK-015 | Add a project-root-constrained file listing and UTF-8 preview service in `agent/file-service.js`. | ✅ | 2026-08-02 |
+| TASK-016 | Add encrypted/direct file-list and preview handlers in `agent/server.js`. | ✅ | 2026-08-02 |
+| TASK-017 | Add a project browser and code preview to `web/src/main.jsx`. | ✅ | 2026-08-02 |
+| TASK-018 | Add compact mobile styles for file navigation and previews in `web/src/accessibility.css`. | ✅ | 2026-08-02 |
+| TASK-019 | Add traversal and preview-limit tests, then run the complete release check. | ✅ | 2026-08-02 |
+
 ## 3. Alternatives
 
 - **ALT-001**: Build a separate proprietary AI agent. Rejected because Vertex must run existing CLI agents unchanged.
@@ -86,6 +99,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **FILE-005**: `web/src/main.jsx` implements all mobile interactions.
 - **FILE-006**: `web/src/accessibility.css` styles the mobile interface.
 - **FILE-007**: `README.md` documents Firebase and Nativine setup.
+- **FILE-008**: `agent/file-service.js` constrains project file access.
 
 ## 6. Testing
 
@@ -94,6 +108,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **TEST-003**: Verify session rename and stop validation.
 - **TEST-004**: Verify revoked relay device keys are rejected.
 - **TEST-005**: Run `npm test`, `npm run build`, and browser/mobile regression checks.
+- **TEST-006**: Verify project-root traversal rejection and binary/oversized preview handling.
 
 ## 7. Risks & Assumptions
 

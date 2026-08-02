@@ -19,6 +19,7 @@ const { RelayClient } = require("./relay-client");
 const { ActivityStore } = require("./activity-store");
 const { TaskMonitor } = require("./task-monitor");
 const { NotificationService } = require("./notification-service");
+const { FileService } = require("./file-service");
 
 const PORT = Number(process.env.VERTEX_PORT || 8787);
 const HOST = process.env.VERTEX_HOST || "0.0.0.0";
@@ -32,6 +33,7 @@ const notifications = new NotificationService({ activities });
 const taskMonitor = new TaskMonitor({ tasks, manager, activities });
 const relayConfig = new RelayConfig().ensure();
 const projects = new ProjectIndex();
+const files = new FileService({ projects });
 const WEB_ROOT = fs.existsSync(path.join(__dirname, "..", "dist")) ? path.join(__dirname, "..", "dist") : path.join(__dirname, "..", "web");
 
 function loadToken() {
@@ -155,6 +157,8 @@ const server = http.createServer(async (request, response) => {
   if (pathname === "/activity" && request.method === "GET") return json(response, 200, { activities:activities.list() });
   if (pathname === "/activity/read" && request.method === "POST") { const body = await readJson(request); return json(response, 200, { activities:activities.markRead(body.id || null) }); }
   if (pathname === "/device-health" && request.method === "GET") return json(response, 200, health());
+  if (pathname === "/files" && request.method === "GET") { const query = new URL(request.url, "http://localhost").searchParams; return json(response, 200, await files.list({ projectPath:query.get("project"), relativePath:query.get("path") || "" })); }
+  if (pathname === "/files/preview" && request.method === "GET") { const query = new URL(request.url, "http://localhost").searchParams; return json(response, 200, await files.preview({ projectPath:query.get("project"), relativePath:query.get("path") || "" })); }
   if (pathname === "/devices" && request.method === "GET") return json(response, 200, { devices: devices.read().map(({ token: _token, relayKey: _relayKey, ...device }) => device) });
   const revokeMatch = pathname.match(/^\/devices\/([a-f0-9-]+)\/revoke$/);
   if (request.method === "POST" && revokeMatch) { devices.revoke(revokeMatch[1]); activities.add({ type:"device_revoked", title:"Device access revoked", detail:revokeMatch[1].slice(0, 8), fingerprint:`revoked:${revokeMatch[1]}` }); return json(response, 200, { ok:true }); }
@@ -230,6 +234,8 @@ function attachClient(client) {
       if (message.type === "listActivity") return send(client, { type:"activity", requestId:message.requestId, activities:activities.list() });
       if (message.type === "readActivity") return send(client, { type:"activity", requestId:message.requestId, activities:activities.markRead(message.id || null) });
       if (message.type === "getHealth") return send(client, { type:"health", requestId:message.requestId, ...health() });
+      if (message.type === "listFiles") return send(client, { type:"files", requestId:message.requestId, ...(await files.list(message)) });
+      if (message.type === "readFile") return send(client, { type:"file", requestId:message.requestId, ...(await files.preview(message)) });
       if (message.type === "listDevices") return send(client, { type:"devices", requestId:message.requestId, devices:devices.read().map(({ token: _token, relayKey: _relayKey, ...device }) => device) });
       if (message.type === "revokeDevice") { devices.revoke(message.id); return send(client, { type:"revoked", requestId:message.requestId, id:message.id }); }
       if (message.type === "sessionAction") return send(client, { type:"sessionAction", requestId:message.requestId, result:await controlSession(message) });

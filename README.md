@@ -12,6 +12,7 @@ Vertex proves one thing first: an Android phone can attach to a persistent `tmux
 - Local AI attention detection: Vertex watches managed tmux tasks on the laptop for approval-like prompts and surfaces an encrypted **needs input** card on the phone. The terminal remains the source of truth.
 - In-app activity inbox: task starts, completions, failures, and attention requests remain stored privately on the laptop and are shown on the phone after reconnecting.
 - Project search, Git diff review, task pin/archive, session rename/stop, terminal search/copy/paste, laptop health, and paired-device revocation.
+- Project file browser with mobile text previews. It is constrained to discovered Git project roots, hides hidden/dependency folders, and refuses binary or oversized files.
 - Android reconnects to the same session after the app is closed; the agent never kills the underlying `tmux` session.
 - Ten-minute QR pairing creates a revocable per-device token.
 - Git diff review for each managed task, with an approve/needs-changes review record.
