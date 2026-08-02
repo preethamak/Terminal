@@ -22,6 +22,7 @@ Vertex proves one thing first: an Android phone can attach to a persistent `tmux
 - Ten-minute QR pairing creates a revocable per-device token.
 - Git diff review for each managed task, with an approve/needs-changes review record.
 - In-app activity notifications when a watched task changes from running to completed, failed, or needs attention.
+- A visible Account → Setup & test screen that shows ready/needs-setup status and can send a safe encrypted in-app activity test.
 
 The repository contains an outbound laptop relay client, an encrypted browser relay client, and a Cloudflare Durable Object relay source. The relay carries AES-GCM encrypted frames only; it does not receive terminal text. Vercel, Cloudflare, and Nativine conversion are ready for personal beta. Reliable operating-system push and biometric unlock need native Firebase/Nativine configuration; see [notifications setup](docs/notifications.md).
 

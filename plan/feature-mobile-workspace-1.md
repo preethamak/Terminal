@@ -31,6 +31,7 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 - **REQ-013**: Let the user create and immediately open a persistent raw terminal in a selected laptop project without launching an AI task.
 - **REQ-014**: Make the real terminal practical on a phone with a Ctrl modifier, common shell symbols, and readable zoom controls.
 - **REQ-015**: Let the user switch between their persistent laptop terminals without leaving the live terminal view.
+- **REQ-016**: Show setup status and self-service checks in the app so personal-beta users can test their own connection and activity delivery.
 - **SEC-001**: Do not expose source files, terminal output, or project paths to the relay in plaintext.
 - **SEC-002**: Device revocation must prevent future relay-frame decryption for the revoked device.
 - **CON-001**: Firebase push delivery cannot be enabled without Firebase project credentials supplied by the account owner.
@@ -158,6 +159,16 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 |---|---|---:|---|
 | TASK-043 | Add a live-terminal session switcher backed by the existing encrypted session list. | ✅ | 2026-08-02 |
 | TASK-044 | Add compact mobile styles and run the full release check before publishing. | ✅ | 2026-08-02 |
+
+### Implementation Phase 12
+
+- GOAL-012: Make readiness and safe self-testing visible in the mobile app.
+
+| Task | Description | Completed | Date |
+|---|---|---:|---|
+| TASK-045 | Add authenticated encrypted/direct test-activity creation on the laptop agent. | ✅ | 2026-08-02 |
+| TASK-046 | Add a Setup & test screen with connection, terminal, project, activity, push, and biometric readiness states. | ✅ | 2026-08-02 |
+| TASK-047 | Add a self-service in-app activity test, document its scope, and run the full release check. | ✅ | 2026-08-02 |
 
 ## 3. Alternatives
 
