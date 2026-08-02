@@ -96,7 +96,55 @@ function App() {
 }
 
 function Welcome({ onConnect }) { const [token, setToken] = useState(""); const [scanner, setScanner] = useState(false); return <main className="welcome"><div className="orb orb-one"/><div className="orb orb-two"/><div className="welcome-card"><Brand/><div className="welcome-copy"><p className="kicker">DEVELOPMENT, UNBOUND</p><h1>Your terminal,<br/><em>wherever you are.</em></h1><p>Start work on your laptop. Continue it naturally from Vertex—without moving your code to the cloud.</p></div><div className="pair-card"><span className="pair-icon">⌘</span><div><strong>Pair your laptop</strong><small>Scan the QR shown by your laptop.</small></div></div><button className="scan-button" onClick={() => setScanner(true)}>Scan Vertex QR <span>⌗</span></button><label className="token-label">Development token<input value={token} onChange={(event) => setToken(event.target.value)} placeholder="Paste only for local testing" type="password" /></label><button className="primary-button" onClick={() => token && onConnect(token)}>Connect Vertex <span>→</span></button><p className="welcome-foot">Your code stays on your laptop. Always.</p></div>{scanner && <QrScanner close={() => setScanner(false)}/>}</main>; }
-function QrScanner({ close }) { const video = useRef(null); const picker = useRef(null); const [message, setMessage] = useState("Opening camera…"); const pair = (value) => { if (value?.includes("relayPair=")) window.location.assign(value); else setMessage("That image is not a Vertex pairing QR. Try again with the QR shown by your laptop."); }; const decodePhoto = (file) => { if (!file) return; const image = new Image(); const url = URL.createObjectURL(file); image.onload = () => { const canvas = document.createElement("canvas"); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight; const context = canvas.getContext("2d", { willReadFrequently:true }); context.drawImage(image, 0, 0); const result = jsQR(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, { inversionAttempts:"attemptBoth" }); URL.revokeObjectURL(url); pair(result?.data); }; image.onerror = () => { URL.revokeObjectURL(url); setMessage("Vertex could not read that photo. Take a sharper photo of the QR."); }; image.src = url; }; useEffect(() => { let stream; let frame; let stopped = false; const start = async () => { if (!("BarcodeDetector" in window)) return setMessage("Live camera scanning is unavailable here. Use “Take QR photo” below instead."); try { stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:"environment" } }, audio:false }); if (stopped) return; video.current.srcObject = stream; await video.current.play(); const detector = new BarcodeDetector({ formats:["qr_code"] }); setMessage("Point the camera at the QR on your laptop."); const scan = async () => { if (stopped) return; try { const codes = await detector.detect(video.current); if (codes[0]?.rawValue) return pair(codes[0].rawValue); } catch { /* A frame can be unavailable while the camera starts. */ } frame = requestAnimationFrame(scan); }; scan(); } catch { setMessage("Live camera permission was blocked. Use “Take QR photo” below instead."); } }; start(); return () => { stopped = true; cancelAnimationFrame(frame); stream?.getTracks().forEach((track) => track.stop()); }; }, []); return <div className="scanner-backdrop"><section className="scanner-card"><button className="sheet-close" onClick={close}>×</button><p className="kicker">PAIR VERTEX</p><h2>Scan the laptop QR</h2><video ref={video} className="scanner-video" muted playsInline/><p>{message}</p><input ref={picker} className="qr-photo-input" type="file" accept="image/*" capture="environment" onChange={(event) => decodePhoto(event.target.files?.[0])}/><button className="scan-photo-button" onClick={() => picker.current?.click()}>Take QR photo <span>⌑</span></button></section></div>; }
+function QrScanner({ close }) {
+  const video = useRef(null); const picker = useRef(null); const stream = useRef(null); const frame = useRef(null); const scanning = useRef(false);
+  const [message, setMessage] = useState("Use your camera, or take a photo of the QR on your laptop.");
+  const [cameraActive, setCameraActive] = useState(false);
+  const pair = useCallback((value) => {
+    if (value?.includes("relayPair=")) window.location.assign(value);
+    else setMessage("That is not a Vertex pairing QR. Try the QR shown by your laptop.");
+  }, []);
+  const decodeImage = useCallback((source, width, height) => {
+    const canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height;
+    const context = canvas.getContext("2d", { willReadFrequently:true }); context.drawImage(source, 0, 0, width, height);
+    return jsQR(context.getImageData(0, 0, width, height).data, width, height, { inversionAttempts:"attemptBoth" })?.data;
+  }, []);
+  const decodePhoto = (file) => {
+    if (!file) return;
+    const image = new Image(); const url = URL.createObjectURL(file);
+    image.onload = () => { const code = decodeImage(image, image.naturalWidth, image.naturalHeight); URL.revokeObjectURL(url); pair(code); };
+    image.onerror = () => { URL.revokeObjectURL(url); setMessage("Vertex could not read that photo. Take a sharper, well-lit photo of the QR."); };
+    image.src = url;
+  };
+  const startCamera = async () => {
+    if (scanning.current) return;
+    setMessage("Requesting camera access…");
+    try {
+      stream.current = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:"environment" } }, audio:false });
+      video.current.srcObject = stream.current; await video.current.play(); scanning.current = true; setCameraActive(true);
+      setMessage("Point your phone at the QR on your laptop.");
+      const detector = "BarcodeDetector" in window ? new BarcodeDetector({ formats:["qr_code"] }) : null;
+      let lastAttempt = 0;
+      const scan = async (timestamp) => {
+        if (!scanning.current || !video.current) return;
+        if (timestamp - lastAttempt > 110 && video.current.videoWidth) {
+          lastAttempt = timestamp;
+          try {
+            const code = detector ? (await detector.detect(video.current))[0]?.rawValue : decodeImage(video.current, video.current.videoWidth, video.current.videoHeight);
+            if (code) return pair(code);
+          } catch { /* The next video frame is safe to try. */ }
+        }
+        frame.current = requestAnimationFrame(scan);
+      };
+      frame.current = requestAnimationFrame(scan);
+    } catch (error) {
+      const denied = error?.name === "NotAllowedError";
+      setMessage(denied ? "Camera access is off. Tap Allow in Android’s prompt, then try again." : "This app cannot open the camera. Use “Take QR photo” below.");
+    }
+  };
+  useEffect(() => () => { scanning.current = false; cancelAnimationFrame(frame.current); stream.current?.getTracks().forEach((track) => track.stop()); }, []);
+  return <div className="scanner-backdrop"><section className="scanner-card"><button className="sheet-close" onClick={close}>×</button><p className="kicker">PAIR VERTEX</p><h2>Scan the laptop QR</h2><video ref={video} className={`scanner-video ${cameraActive ? "is-active" : ""}`} muted playsInline/><p>{message}</p><button className="primary-button scanner-camera-button" onClick={startCamera}>{cameraActive ? "Camera is scanning…" : "Use camera"}<span>⌗</span></button><input ref={picker} className="qr-photo-input" type="file" accept="image/*" capture="environment" onChange={(event) => decodePhoto(event.target.files?.[0])}/><button className="scan-photo-button" onClick={() => picker.current?.click()}>Take or choose QR photo <span>⌑</span></button><small className="scanner-help">Camera stays on your phone. Vertex only reads the pairing code.</small></section></div>;
+}
 function Brand() { return <div className="brand"><span className="brand-mark">V</span><span>vertex</span></div>; }
 function Topbar({ status, onProfile }) { return <header className="topbar"><Brand/><button className="connection-pill" onClick={onProfile}><i></i>{status}<span>⌄</span></button></header>; }
 function Hero({ tasks, onStart }) { const active = tasks.find((task) => task.status === "running"); return <section className="hero"><div className="hero-glow"/><div className="hero-copy"><p className="kicker">{active ? "RUNNING ON YOUR LAPTOP" : "READY WHEN YOU ARE"}</p><h1>{active ? active.name : "Pick up where you left off."}</h1><p>{active ? `${active.projectName || "Workspace"} · ${active.cli || "terminal"} is still working.` : "Start an AI task and Vertex will keep it within reach."}</p><button className="hero-action" onClick={onStart}>{active ? "Open task" : "Start a task"}<span>→</span></button></div><div className="hero-visual"><div className="terminal-mini"><div><b></b><b></b><b></b></div><code><i>$</i> {active ? "codex working…" : "vertex connect"}<br/><span>{active ? "✓ reading repository" : "your laptop is ready"}</span></code></div></div></section>; }
@@ -110,15 +158,45 @@ function Sheet({ kind, vertex, selected, close, openTerminal }) { const content 
   return <div className="sheet-backdrop" onMouseDown={close}><section className="sheet" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-handle"/><button className="sheet-close" onClick={close}>×</button>{content.type === "profile" ? <><p className="kicker">VERTEX DEVICE</p><h2>Your private workspace</h2><div className="profile-row"><span className="avatar">A</span><div><strong>Paired laptop</strong><small>{vertex.status}</small></div><i className="status-dot running"/></div><button className="danger-button" onClick={() => { vertex.forget(); close(); }}>Forget this laptop</button></> : taskDetail ? <TaskDetail task={selected} vertex={vertex} openTerminal={openTerminal} close={close}/> : content.type === "projects" ? <><p className="kicker">WORKSPACES</p><h2>Choose a project</h2><ProjectGrid projects={vertex.data.projects} onOpen={(item) => { setTask((current) => ({ ...current, cwd:item.path })); }} /></> : content.type === "activity" ? <><p className="kicker">ACTIVITY</p><h2>Everything is here</h2><p className="muted-copy">Vertex keeps sessions running on your laptop while you are away.</p></> : <><p className="kicker">{project ? project.name.toUpperCase() : "NEW AI TASK"}</p><h2>Tell your laptop what to do.</h2><div className="agent-pills">{["codex","claude","command"].map((item) => <button className={task.cli === item ? "selected" : ""} key={item} onClick={() => setTask({ ...task, cli:item })}>{item === "claude" ? "Claude" : item === "codex" ? "Codex" : "Command"}</button>)}</div><label>Task name<input value={task.name} onChange={(event) => setTask({ ...task, name:event.target.value })} placeholder="Fix the login flow"/></label><label>Project<select value={task.cwd} onChange={(event) => setTask({ ...task, cwd:event.target.value })}><option value="">Choose a workspace</option>{vertex.data.projects.map((item) => <option key={item.path} value={item.path}>{item.name} · {item.branch}</option>)}</select></label><label>{task.cli === "command" ? "Command" : "What should it do?"}<textarea value={task.prompt} onChange={(event) => setTask({ ...task, prompt:event.target.value })} placeholder={task.cli === "command" ? "npm test" : "Fix the issue, explain the change, and run the tests."}/></label>{error && <p className="form-error">{error}</p>}<button className="primary-button" disabled={busy} onClick={createTask}>{busy ? "Starting…" : "Start on laptop"}<span>→</span></button></>}</section></div>; }
 function TaskDetail({ task, vertex, openTerminal, close }) { const [diff, setDiff] = useState(null); useEffect(() => { if (task?.id) vertex.request("taskDiff", { id:task.id }).then(setDiff).catch(() => setDiff({ stat:"Changes will appear here when available." })); }, [task?.id, vertex.request]); if (!task) return null; return <><p className="kicker">{task.status === "running" ? "WORKING NOW" : "TASK REVIEW"}</p><h2>{task.name}</h2><div className="detail-meta"><span className={`status-dot ${task.status}`}/>{task.projectName || "Workspace"}<b>·</b>{task.cli}</div><div className="diff-preview"><strong>{diff?.stat || "Checking changes…"}</strong><pre>{diff?.diff || "Vertex will show a safe, reviewable diff once the task changes files."}</pre></div><button className="primary-button" onClick={() => openTerminal(task)}>Open live terminal <span>→</span></button><button className="secondary-button" onClick={close}>Keep running in background</button></>; }
 
-function TerminalView({ vertex, session, onClose }) { const element = useRef(null); const socket = useRef(null); const terminal = useRef(null); const fit = useRef(null); const output = useRef({ expected:1, pending:new Map(), scheduled:false }); const [status, setStatus] = useState("Connecting…");
-  useEffect(() => { let disposed = false; let cleanup = () => {}; (async () => { const [{ Terminal }, { FitAddon }] = await Promise.all([import("@xterm/xterm"), import("@xterm/addon-fit"), import("@xterm/xterm/css/xterm.css")]); if (disposed) return; const term = new Terminal({ cursorBlink:true, fontSize:14, fontFamily:"'JetBrains Mono', ui-monospace, monospace", theme:{ background:"#090b11", foreground:"#eaf0ff", cursor:"#a7b6ff", selectionBackground:"#364267" }, scrollback:10000 }); const addon = new FitAddon(); term.loadAddon(addon); term.open(element.current); terminal.current = term; fit.current = addon;
-    const send = (message) => vertex.send(message, socket.current); const resize = () => { addon.fit(); send({ type:"resize", cols:term.cols, rows:term.rows }); }; const flush = () => { output.current.scheduled = false; let text=""; while (output.current.pending.has(output.current.expected)) { text += output.current.pending.get(output.current.expected); output.current.pending.delete(output.current.expected++); } if (text) term.write(text); };
-    const receive = (event) => { if (event.type === "terminalSnapshot") { term.reset(); term.write(event.data); output.current = { expected:event.sequence + 1, pending:new Map(), scheduled:false }; resize(); } if (event.type === "output" && event.sequence >= output.current.expected && !output.current.pending.has(event.sequence)) { output.current.pending.set(event.sequence,event.data); if (!output.current.scheduled) { output.current.scheduled = true; requestAnimationFrame(flush); } } if (event.type === "attached") setStatus("Live"); if (event.type === "error") setStatus(event.message); };
-    vertex.terminalListener.current = receive; term.onData((data) => send({ type:"input", data })); const observer = new ResizeObserver(() => setTimeout(resize, 80)); observer.observe(element.current); if (vertex.relay) { send({ type:"attach", name:session.name }); setStatus("Live"); } else { const connectDirect = () => { if (disposed) return; const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/?token=${encodeURIComponent(vertex.token)}`); socket.current = ws; ws.onopen = () => ws.send(JSON.stringify({ type:"attach", name:session.name })); ws.onmessage = ({ data }) => receive(JSON.parse(data)); ws.onclose = () => { if (!disposed) { setStatus("Reconnecting…"); setTimeout(connectDirect, 1000); } }; }; connectDirect(); }
-    requestAnimationFrame(resize); cleanup = () => { vertex.terminalListener.current = () => {}; observer.disconnect(); socket.current?.close(); term.dispose(); };
-  })().catch((error) => setStatus(error.message)); return () => { disposed = true; cleanup(); };
+function TerminalView({ vertex, session, onClose }) {
+  const element = useRef(null); const socket = useRef(null); const terminal = useRef(null); const output = useRef({ expected:1, pending:new Map(), scheduled:false }); const touchY = useRef(null);
+  const [status, setStatus] = useState("Connecting…"); const [following, setFollowing] = useState(true);
+  useEffect(() => {
+    let disposed = false; let cleanup = () => {};
+    (async () => {
+      const [{ Terminal }, { FitAddon }] = await Promise.all([import("@xterm/xterm"), import("@xterm/addon-fit"), import("@xterm/xterm/css/xterm.css")]);
+      if (disposed) return;
+      const term = new Terminal({ cursorBlink:true, fontSize:14, fontFamily:"'JetBrains Mono', ui-monospace, monospace", theme:{ background:"#090b11", foreground:"#eaf0ff", cursor:"#a7b6ff", selectionBackground:"#364267" }, scrollback:10000, scrollSensitivity:3 });
+      const addon = new FitAddon(); term.loadAddon(addon); term.open(element.current); terminal.current = term;
+      const send = (message) => vertex.send(message, socket.current);
+      const resize = () => { addon.fit(); send({ type:"resize", cols:term.cols, rows:term.rows }); };
+      const updateFollowState = () => setFollowing(term.buffer.active.viewportY >= term.buffer.active.baseY);
+      const flush = () => { output.current.scheduled = false; let text=""; while (output.current.pending.has(output.current.expected)) { text += output.current.pending.get(output.current.expected); output.current.pending.delete(output.current.expected++); } if (text) term.write(text, updateFollowState); };
+      const receive = (event) => {
+        if (event.type === "terminalSnapshot") { term.reset(); term.write(event.data, updateFollowState); output.current = { expected:event.sequence + 1, pending:new Map(), scheduled:false }; resize(); }
+        if (event.type === "output" && event.sequence >= output.current.expected && !output.current.pending.has(event.sequence)) { output.current.pending.set(event.sequence,event.data); if (!output.current.scheduled) { output.current.scheduled = true; requestAnimationFrame(flush); } }
+        if (event.type === "attached") setStatus("Live"); if (event.type === "error") setStatus(event.message);
+      };
+      const onTouchStart = (event) => { touchY.current = event.touches[0]?.clientY ?? null; };
+      const onTouchMove = (event) => {
+        const nextY = event.touches[0]?.clientY; if (touchY.current === null || nextY === undefined) return;
+        const difference = nextY - touchY.current;
+        if (Math.abs(difference) < 7) return;
+        term.scrollLines(Math.round(-difference / 8)); touchY.current = nextY; updateFollowState(); event.preventDefault();
+      };
+      const onTouchEnd = () => { touchY.current = null; };
+      vertex.terminalListener.current = receive; const dataListener = term.onData((data) => send({ type:"input", data })); const scrollListener = term.onScroll(updateFollowState);
+      element.current.addEventListener("touchstart", onTouchStart, { passive:true }); element.current.addEventListener("touchmove", onTouchMove, { passive:false }); element.current.addEventListener("touchend", onTouchEnd, { passive:true });
+      const observer = new ResizeObserver(() => setTimeout(resize, 80)); observer.observe(element.current);
+      if (vertex.relay) { send({ type:"attach", name:session.name }); setStatus("Live"); } else { const connectDirect = () => { if (disposed) return; const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/?token=${encodeURIComponent(vertex.token)}`); socket.current = ws; ws.onopen = () => ws.send(JSON.stringify({ type:"attach", name:session.name })); ws.onmessage = ({ data }) => receive(JSON.parse(data)); ws.onclose = () => { if (!disposed) { setStatus("Reconnecting…"); setTimeout(connectDirect, 1000); } }; }; connectDirect(); }
+      requestAnimationFrame(resize);
+      cleanup = () => { vertex.terminalListener.current = () => {}; observer.disconnect(); dataListener.dispose(); scrollListener.dispose(); element.current?.removeEventListener("touchstart", onTouchStart); element.current?.removeEventListener("touchmove", onTouchMove); element.current?.removeEventListener("touchend", onTouchEnd); socket.current?.close(); term.dispose(); };
+    })().catch((error) => setStatus(error.message));
+    return () => { disposed = true; cleanup(); };
   }, [session.name, vertex.relay, vertex.token, vertex.send, vertex.terminalListener]);
-  const keys = [["Ctrl+C","\u0003"],["Esc","\u001b"],["Tab","\t"],["↑","\u001b[A"],["↓","\u001b[B"],["←","\u001b[D"],["→","\u001b[C"]]; return <main className="terminal-page"><header><button onClick={onClose}>‹</button><div><span className="kicker">LIVE TERMINAL</span><strong>{session.name}</strong></div><span className="live-pill"><i/> {status}</span></header><div className="terminal-wrap" ref={element}/><nav className="terminal-keys">{keys.map(([label,data]) => <button key={label} onClick={() => vertex.send({ type:"input", data }, socket.current)}>{label}</button>)}</nav></main>; }
+  const keys = [["Ctrl+C","\u0003"],["Esc","\u001b"],["Tab","\t"],["↑","\u001b[A"],["↓","\u001b[B"],["←","\u001b[D"],["→","\u001b[C"]];
+  return <main className="terminal-page"><header><button aria-label="Back to dashboard" onClick={onClose}>‹</button><div><span className="kicker">LIVE TERMINAL</span><strong>{session.name}</strong></div><span className="live-pill"><i/> {status}</span></header><div className="terminal-area"><div className="terminal-wrap" ref={element}/>{!following && <button className="terminal-follow" onClick={() => { terminal.current?.scrollToBottom(); setFollowing(true); }}>↓ Live</button>}<p className="terminal-hint">Swipe to review output</p></div><nav className="terminal-keys">{keys.map(([label,data]) => <button key={label} onClick={() => vertex.send({ type:"input", data }, socket.current)}>{label}</button>)}</nav></main>;
+}
 
 const root = globalThis.__vertexReactRoot || createRoot(document.getElementById("root"));
 globalThis.__vertexReactRoot = root;
