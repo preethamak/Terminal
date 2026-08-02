@@ -1,0 +1,11 @@
+name = "vertex-relay"
+main = "worker.js"
+compatibility_date = "2026-08-02"
+
+[[durable_objects.bindings]]
+name = "MACHINE_RELAY"
+class_name = "MachineRelay"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["MachineRelay"]

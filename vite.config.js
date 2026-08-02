@@ -1,0 +1,8 @@
+const { defineConfig } = require("vite");
+const react = require("@vitejs/plugin-react");
+
+module.exports = defineConfig({
+  root: "web",
+  plugins: [react()],
+  build: { outDir: "../dist", emptyOutDir: true },
+});

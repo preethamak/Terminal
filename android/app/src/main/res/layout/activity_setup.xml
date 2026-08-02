@@ -1,0 +1,11 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="20dp">
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Connect your laptop" android:textSize="28sp" android:textStyle="bold" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+        android:text="For the spike, enter the Linux agent’s Tailscale address and pairing token." />
+    <EditText android:id="@+id/endpoint" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="18dp"
+        android:hint="http://100.x.y.z:8787" android:inputType="textUri" />
+    <EditText android:id="@+id/token" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+        android:hint="Pairing token" android:inputType="textPassword" />
+    <Button android:id="@+id/save" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="Connect" />
+</LinearLayout>

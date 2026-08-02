@@ -1,0 +1,285 @@
+const crypto = require("node:crypto");
+const fs = require("node:fs");
+const http = require("node:http");
+const os = require("node:os");
+const path = require("node:path");
+const { execFile } = require("node:child_process");
+const { promisify } = require("node:util");
+const { WebSocketServer } = require("ws");
+const { SessionManager } = require("./session-manager");
+const { shellQuote } = require("./session-manager");
+const { TaskStore } = require("./task-store");
+const { DeviceStore } = require("./device-store");
+const { outputSequencer, validateResize } = require("./terminal-protocol");
+const { ProjectIndex } = require("./project-index");
+const { appendEvent, event } = require("./adapters/adapter");
+const { diffForTask: diffForTaskService } = require("./diff-service");
+const { RelayConfig } = require("./relay-config");
+const { RelayClient } = require("./relay-client");
+
+const PORT = Number(process.env.VERTEX_PORT || 8787);
+const HOST = process.env.VERTEX_HOST || "0.0.0.0";
+const TOKEN_FILE = process.env.VERTEX_TOKEN_FILE || path.join(process.env.HOME || ".", ".vertex", "token");
+const manager = new SessionManager();
+const execFileAsync = promisify(execFile);
+const tasks = new TaskStore();
+const devices = new DeviceStore();
+const relayConfig = new RelayConfig().ensure();
+const projects = new ProjectIndex();
+const WEB_ROOT = fs.existsSync(path.join(__dirname, "..", "dist")) ? path.join(__dirname, "..", "dist") : path.join(__dirname, "..", "web");
+
+function loadToken() {
+  if (process.env.VERTEX_TOKEN) return process.env.VERTEX_TOKEN;
+  fs.mkdirSync(path.dirname(TOKEN_FILE), { recursive: true, mode: 0o700 });
+  try {
+    return fs.readFileSync(TOKEN_FILE, "utf8").trim();
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    const token = crypto.randomBytes(32).toString("base64url");
+    fs.writeFileSync(TOKEN_FILE, `${token}\n`, { mode: 0o600 });
+    return token;
+  }
+}
+
+const token = loadToken();
+
+function localAddress() {
+  for (const entries of Object.values(os.networkInterfaces())) {
+    for (const entry of entries || []) {
+      if (entry.family === "IPv4" && !entry.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(entry.address)) return entry.address;
+    }
+  }
+  return null;
+}
+
+function authorized(request) {
+  const supplied = request.headers.authorization?.replace(/^Bearer\s+/i, "") || new URL(request.url, "http://localhost").searchParams.get("token");
+  if (!supplied) return false;
+  if (devices.findByToken(supplied)) return true;
+  const expected = Buffer.from(token);
+  const actual = Buffer.from(supplied);
+  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+}
+
+function readJson(request) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; if (body.length > 64 * 1024) request.destroy(); });
+    request.on("end", () => { try { resolve(JSON.parse(body || "{}")); } catch { reject(new Error("Invalid JSON.")); } });
+    request.on("error", reject);
+  });
+}
+
+function json(response, status, body) {
+  response.writeHead(status, { "content-type": "application/json" });
+  response.end(JSON.stringify(body));
+}
+
+function sendWebFile(request, response) {
+  const pathname = new URL(request.url, "http://localhost").pathname;
+  const requested = pathname === "/" ? "index.html" : pathname.replace(/^\//, "");
+  const file = path.resolve(WEB_ROOT, requested);
+  if (!file.startsWith(`${WEB_ROOT}${path.sep}`)) return false;
+  try {
+    const contents = fs.readFileSync(file);
+    const types = { ".css": "text/css", ".html": "text/html", ".js": "text/javascript", ".json": "application/manifest+json", ".svg": "image/svg+xml" };
+    response.writeHead(200, { "content-type": types[path.extname(file)] || "application/octet-stream", "cache-control": "no-cache" });
+    response.end(contents);
+    return true;
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+function sendVendorFile(request, response) {
+  const pathname = new URL(request.url, "http://localhost").pathname;
+  const files = {
+    "/vendor/xterm.js": ["@xterm/xterm/lib/xterm.js", "text/javascript"],
+    "/vendor/xterm.css": ["@xterm/xterm/css/xterm.css", "text/css"],
+    "/vendor/addon-fit.js": ["@xterm/addon-fit/lib/addon-fit.js", "text/javascript"],
+  };
+  const item = files[pathname];
+  if (!item) return false;
+  response.writeHead(200, { "content-type": item[1], "cache-control": "public, max-age=31536000, immutable" });
+  fs.createReadStream(path.join(__dirname, "..", "node_modules", item[0])).pipe(response);
+  return true;
+}
+
+const server = http.createServer(async (request, response) => {
+  const pathname = new URL(request.url, "http://localhost").pathname;
+  if (pathname === "/health") return json(response, 200, { ok: true });
+  if (request.method === "GET" && sendVendorFile(request, response)) return;
+  if (request.method === "GET" && sendWebFile(request, response)) return;
+  if (request.method === "POST" && pathname === "/pair") {
+    try {
+      const body = await readJson(request);
+      const device = devices.pair(body.code, body.name);
+      return json(response, 201, { token: device.token, device: { id: device.id, name: device.name } });
+    } catch (error) { return json(response, 400, { error: error.message }); }
+  }
+  if (!authorized(request)) return json(response, 401, { error: "Unauthorized" });
+  if (pathname === "/sessions") {
+    try {
+      return json(response, 200, { sessions: await manager.list() });
+    } catch (error) {
+      return json(response, 503, { error: error.message });
+    }
+  }
+  if (pathname === "/tasks") return json(response, 200, { tasks: tasks.sync() });
+  if (pathname === "/projects" && request.method === "GET") return json(response, 200, { projects: projects.list() });
+  if (pathname === "/projects/refresh" && request.method === "POST") return json(response, 200, { projects: await projects.refresh() });
+  const diffMatch = pathname.match(/^\/tasks\/([a-f0-9-]+)\/diff$/);
+  if (request.method === "GET" && diffMatch) {
+    try { return json(response, 200, await diffForTask(diffMatch[1])); } catch (error) { return json(response, 400, { error: error.message }); }
+  }
+  const reviewMatch = pathname.match(/^\/tasks\/([a-f0-9-]+)\/review$/);
+  if (request.method === "POST" && reviewMatch) {
+    try { const body = await readJson(request); return json(response, 200, { task: tasks.review(reviewMatch[1], body.decision) }); } catch (error) { return json(response, 400, { error: error.message }); }
+  }
+  if (pathname === "/devices") return json(response, 200, { devices: devices.read().map(({ token: _token, relayKey: _relayKey, ...device }) => device) });
+  return json(response, 404, { error: "Not found" });
+});
+
+const websocket = new WebSocketServer({ noServer: true });
+server.on("upgrade", (request, socket, head) => {
+  if (!authorized(request)) return socket.destroy();
+  websocket.handleUpgrade(request, socket, head, (client) => websocket.emit("connection", client));
+});
+
+function send(client, message) {
+  if (client.readyState === client.OPEN) client.send(JSON.stringify(message));
+}
+
+function commandForTask({ cli, prompt, command }) {
+  if (cli === "codex") return `codex ${shellQuote(prompt || "")}`;
+  if (cli === "claude") return `claude ${shellQuote(prompt || "")}`;
+  if (cli === "command" && command) return command;
+  throw new Error("Choose Codex, Claude, or provide a command.");
+}
+
+async function createTask(message) {
+  const id = crypto.randomUUID();
+  const name = message.name;
+  let baseRef = null; let branch = "detached";
+  try { ({ stdout: baseRef } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: message.cwd })); baseRef = baseRef.trim(); } catch { /* non-git project */ }
+  try { ({ stdout: branch } = await execFileAsync("git", ["branch", "--show-current"], { cwd: message.cwd })); branch = branch.trim() || "detached"; } catch { /* non-git project */ }
+  const task = {
+    id, name, cwd: message.cwd, projectName: path.basename(message.cwd), branch, cli: message.cli, prompt: message.prompt || "", status: "running",
+    createdAt: Date.now(), eventFile: tasks.eventFile(id), baseRef,
+  };
+  await manager.create({ name, cwd: message.cwd, command: commandForTask(message), eventFile: task.eventFile });
+  tasks.add(task);
+  appendEvent(task, event(task, "task_started", { cli: task.cli, prompt: task.prompt }));
+  projects.touch(message.cwd);
+  return task;
+}
+
+async function diffForTask(id) {
+  const task = tasks.find(id);
+  return { task, ...(await diffForTaskService(task)) };
+}
+
+function attachClient(client) {
+  let terminal;
+  send(client, { type: "ready" });
+
+  client.on("message", async (raw) => {
+    let message;
+    try {
+      message = JSON.parse(raw.toString());
+    } catch {
+      return send(client, { type: "error", message: "Messages must be JSON." });
+    }
+    try {
+      if (message.type === "list") return send(client, { type: "sessions", requestId: message.requestId, sessions: await manager.list() });
+      if (message.type === "listTasks") return send(client, { type: "tasks", requestId: message.requestId, tasks: tasks.sync() });
+      if (message.type === "listProjects") return send(client, { type: "projects", requestId: message.requestId, projects: projects.list() });
+      if (message.type === "refreshProjects") return send(client, { type: "projects", requestId: message.requestId, projects: await projects.refresh() });
+      if (message.type === "taskDiff") return send(client, { type: "diff", requestId: message.requestId, ...(await diffForTask(message.id)) });
+      if (message.type === "reviewTask") return send(client, { type: "reviewed", requestId: message.requestId, task: tasks.review(message.id, message.decision) });
+      if (message.type === "create") return send(client, { type: "created", requestId: message.requestId, session: await manager.create(message) });
+      if (message.type === "createTask") return send(client, { type: "taskCreated", requestId: message.requestId, task: await createTask(message) });
+      if (message.type === "attach") {
+        terminal?.kill();
+        const snapshot = await manager.snapshot(message.name);
+        const sequencer = outputSequencer((event) => send(client, event));
+        send(client, { type: "terminalSnapshot", sequence: sequencer.current(), data: snapshot });
+        terminal = manager.attach(message.name, {
+          onData: (data) => sequencer.next(data),
+          onExit: ({ exitCode }) => send(client, { type: "closed", exitCode }),
+        });
+        return send(client, { type: "attached", name: message.name });
+      }
+      if (message.type === "input" && terminal) return terminal.write(String(message.data || ""));
+      if (message.type === "resize" && terminal) {
+        const size = validateResize(message);
+        return terminal.resize(size.cols, size.rows);
+      }
+      return send(client, { type: "error", message: "Unknown message or no attached session." });
+    } catch (error) {
+      send(client, { type: "error", message: error.message });
+    }
+  });
+  client.on("close", () => terminal?.kill());
+}
+
+websocket.on("connection", attachClient);
+
+// The relay connection is optional during development. Once VERTEX_RELAY_URL is set,
+// the laptop initiates this outbound connection and no phone needs a direct laptop URL.
+if (relayConfig.relayUrl) {
+  const relay = new RelayClient({ relayUrl: relayConfig.relayUrl, machineId: relayConfig.machineId, devices, pairingKey: (code) => devices.pairingKey(code) });
+  const relayClients = new Map();
+  relay.on("online", () => console.log(`Vertex relay connected for machine ${relayConfig.machineId}`));
+  relay.on("offline", () => console.log("Vertex relay disconnected; retrying…"));
+  relay.on("message", ({ message, keyId, pairCode }) => {
+    if (keyId === "pair") {
+      if (message.type !== "pair" || message.code !== pairCode) return;
+      try {
+        const device = devices.pair(pairCode, message.name);
+        relay.send({ keyId: "pair", pairCode, message: { type: "paired", device: { id: device.id, name: device.name }, key: device.relayKey } });
+      } catch { /* A failed pairing is intentionally indistinguishable to the relay. */ }
+      return;
+    }
+    let client = relayClients.get(keyId);
+    if (!client) {
+      const { EventEmitter } = require("node:events");
+      client = new EventEmitter();
+      client.readyState = 1; client.OPEN = 1;
+      client.send = (serialized) => relay.send({ keyId, message: JSON.parse(serialized) });
+      client.kill = () => client.emit("close");
+      relayClients.set(keyId, client);
+      attachClient(client);
+    }
+    client.emit("message", JSON.stringify(message));
+  });
+  relay.start();
+}
+
+server.listen(PORT, HOST, () => {
+  console.log(`Vertex agent listening on http://${HOST}:${PORT}`);
+  const pairCode = devices.createChallenge();
+  let publicUrl = process.env.VERTEX_PAIR_URL;
+  if (relayConfig.relayUrl) {
+    const relayPair = Buffer.from(JSON.stringify({ v: 1, relay: relayConfig.relayUrl, machine: relayConfig.machineId, code: pairCode, key: devices.pairingKey(pairCode) })).toString("base64url");
+    const appUrl = process.env.VERTEX_APP_URL || "https://app.vertex.example";
+    const pairUrl = `${appUrl.replace(/\/$/, "")}/?relayPair=${relayPair}`;
+    console.log(`Vertex relay pairing QR (valid for 10 minutes): ${pairUrl}`);
+    try { require("node:child_process").execFileSync("qrencode", ["-t", "ANSIUTF8", pairUrl], { stdio: "inherit" }); } catch { console.log("Install qrencode to display that URL as a terminal QR code."); }
+    console.log("Vertex relay mode: the laptop makes an outbound encrypted connection; no Tailscale is used.");
+    return;
+  }
+  if (!publicUrl) {
+    try { publicUrl = `http://${require("node:child_process").execFileSync("tailscale", ["ip", "-4"], { encoding: "utf8" }).trim()}:${PORT}`; } catch { publicUrl = `http://<laptop-tailscale-ip>:${PORT}`; }
+  }
+  if (publicUrl.includes("<laptop-tailscale-ip>")) {
+    const address = localAddress();
+    if (address) publicUrl = `http://${address}:${PORT}`;
+  }
+  const pairUrl = `${publicUrl.replace(/\/$/, "")}/?pair=${pairCode}`;
+  console.log(`Pairing QR URL (valid for 10 minutes): ${pairUrl}`);
+  console.log(`Bootstrap token (development fallback): ${token}`);
+  try { require("node:child_process").execFileSync("qrencode", ["-t", "ANSIUTF8", pairUrl], { stdio: "inherit" }); } catch { console.log("Install qrencode to display that URL as a terminal QR code."); }
+  console.log("Development-only direct mode. Set VERTEX_RELAY_URL to use the Vertex relay transport.");
+});
