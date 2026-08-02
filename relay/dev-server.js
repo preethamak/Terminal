@@ -10,7 +10,7 @@ const server = http.createServer((request, response) => {
 });
 const sockets = new WebSocketServer({ noServer:true }); const machines = new Map();
 function machine(id) { if (!machines.has(id)) machines.set(id, { agent:null, devices:new Map() }); return machines.get(id); }
-function safeSend(socket, message) { if (socket?.readyState === socket.OPEN) socket.send(JSON.stringify(message)); }
+function safeSend(socket, message) { if (socket && socket.readyState === socket.OPEN) socket.send(JSON.stringify(message)); }
 server.on("upgrade", (request, socket, head) => {
   const url = new URL(request.url, "http://localhost");
   if (url.pathname !== "/v1/connect") return socket.destroy();
@@ -28,4 +28,5 @@ server.on("upgrade", (request, socket, head) => {
     ws.on("close", () => { if (role === "agent" && room.agent === ws) room.agent = null; if (role === "device" && room.devices.get(client) === ws) room.devices.delete(client); });
   });
 });
-server.listen(port, "127.0.0.1", () => console.log(`Vertex local relay on ws://127.0.0.1:${port}/v1/connect`));
+if (require.main === module) server.listen(port, "127.0.0.1", () => console.log(`Vertex local relay on ws://127.0.0.1:${port}/v1/connect`));
+module.exports = { safeSend };

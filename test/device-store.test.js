@@ -14,3 +14,15 @@ test("a QR challenge creates a revocable device token", () => {
   assert.equal(store.findByToken(device.token), undefined);
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("a relay pairing challenge is short-lived, secret, and creates a per-device relay key", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "vertex-device-store-relay-"));
+  const store = new DeviceStore(root); const code = store.createChallenge(); const pairingKey = store.pairingKey(code);
+  assert.equal(Buffer.from(pairingKey, "base64url").length, 32);
+  const device = store.pair(code, "Relay phone");
+  assert.equal(store.pairingKey(code), null);
+  assert.equal(store.findRelayKey(device.id), device.relayKey);
+  store.revoke(device.id);
+  assert.equal(store.findRelayKey(device.id), null);
+  fs.rmSync(root, { recursive: true, force: true });
+});
