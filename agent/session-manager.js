@@ -84,7 +84,9 @@ class SessionManager {
 
   async snapshot(name) {
     if (!SESSION_NAME.test(name || "")) throw new Error("Invalid session name.");
-    const { stdout } = await execFileAsync("tmux", ["capture-pane", "-p", "-e", "-t", name]);
+    // A reconnect should restore the terminal's reviewable history, not only the
+    // currently visible pane. tmux limits this to the session history-limit.
+    const { stdout } = await execFileAsync("tmux", ["capture-pane", "-p", "-e", "-S", "-", "-t", name]);
     return stdout;
   }
 
