@@ -183,6 +183,15 @@ Deliver the full personal-beta checklist: project discovery, task attention, mob
 | TASK-051 | Add shell/documentation checks and run the full release check. | ✅ | 2026-08-02 |
 | TASK-052 | Add a no-camera pairing-link fallback and clear wrapper-permission guidance. | ✅ | 2026-08-02 |
 
+### Implementation Phase 14
+
+- GOAL-014: Make pairing failures diagnosable on the phone rather than silently returning to the welcome screen.
+
+| Task | Description | Completed | Date |
+|---|---|---:|---|
+| TASK-053 | Show live pairing progress and a clear expired/used/offline result for QR and pasted pairing links. | ✅ | 2026-08-03 |
+| TASK-054 | Add a fresh-link recovery instruction and run the full release check. | ✅ | 2026-08-03 |
+
 ## 3. Alternatives
 
 - **ALT-001**: Build a separate proprietary AI agent. Rejected because Vertex must run existing CLI agents unchanged.
