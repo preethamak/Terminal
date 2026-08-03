@@ -1,0 +1,13 @@
+.workspace-locations {
+  margin: 12px 0 2px;
+  padding: 11px;
+  border: 1px solid #303a51;
+  border-radius: 13px;
+  color: #bbc8e9;
+  background: #111827;
+}
+
+.workspace-locations summary { cursor: pointer; color: #dbe3ff; font-size: 11px; font-weight: 800; }
+.workspace-locations p { margin: 9px 0; color: #94a1bc; font-size: 10px; line-height: 1.45; }
+.workspace-locations input { width: 100%; padding: 10px; border: 1px solid #35415c; border-radius: 9px; color: #edf1ff; background: #0b101a; font-size: 11px; }
+.workspace-locations .secondary-button { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
