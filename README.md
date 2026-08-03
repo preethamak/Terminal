@@ -24,6 +24,12 @@ Vertex proves one thing first: an Android phone can attach to a persistent `tmux
 - Git diff review for each managed task, with an approve/needs-changes review record.
 - In-app activity notifications when a watched task changes from running to completed, failed, or needs attention.
 - A visible Account → Setup & test screen that shows ready/needs-setup status and can send a safe encrypted in-app activity test.
+- **Travel Mode**: a confirmed laptop heartbeat, battery, disk-free space, agent uptime/version, relay reconnect count, and locally persisted agent restart history. It can hold a Linux sleep inhibitor while you are away, and reports an unavailable inhibitor rather than pretending the laptop is protected.
+- Active Work cards put AI approvals, running Codex/Claude tasks, and stopped Docker containers before generic terminal lists.
+- Checkpoints are short handoff notes saved privately on the laptop against a task or terminal, so an interrupted trip does not lose context.
+- New Workspace can create a folder, initialise Git, and immediately launch a real terminal, Codex, or Claude session.
+- Phone uploads are limited to a selected Vertex workspace, supported text/code/image/PDF files, and 5 MiB. Vertex refuses path traversal and never uploads a file to its relay.
+- Account includes paired-device revocation and an emergency remote lock. The lock can only be removed locally on the laptop with `npm run unlock`.
 
 The repository contains an outbound laptop relay client, an encrypted browser relay client, and a Cloudflare Durable Object relay source. The relay carries AES-GCM encrypted frames only; it does not receive terminal text. Vercel, Cloudflare, and Nativine conversion are ready for personal beta. Reliable operating-system push and biometric unlock need native Firebase/Nativine configuration; see [notifications setup](docs/notifications.md).
 
@@ -69,6 +75,22 @@ bash scripts/install-linux.sh
 ```
 
 This installs a `systemd --user` service and keeps the two public URLs in `~/.config/vertex/agent.env` with owner-only permissions. Vertex starts automatically when you log in, restarts if it fails, and preserves the existing device pairing and tmux sessions. Check it with `systemctl --user status vertex-agent.service`, follow its logs with `journalctl --user -u vertex-agent.service -f`, and stop it with `systemctl --user disable --now vertex-agent.service`.
+
+## Travel Mode and travel preflight
+
+Travel Mode is a sleep-prevention layer, not remote wake. Turn it on in the Vertex home dashboard before leaving; it runs `systemd-inhibit` on the laptop and Vertex shows whether that process is actually active. It protects a laptop that is already running, but cannot wake a machine after power loss, hibernation, a BIOS reboot, or a disconnected router.
+
+Before travelling, keep the laptop on AC power, configure its desktop power settings to **not suspend on AC**, and either leave its lid open or set lid-close to **Do nothing**. Run a mobile-data test from the phone before leaving. For work launched outside Vertex, start it inside tmux so it remains resumable:
+
+```bash
+tmux new -s work -c ~/Projects/your-project
+```
+
+If you use **Lock Vertex** from the phone, all paired devices are immediately rejected. On the laptop, run this exact local command to restore them:
+
+```bash
+cd ~/vertex && npm run unlock
+```
 
 To pair a phone after installing the service, run this one command on the laptop. It restarts the agent and prints a fresh QR and a clickable pairing link, both valid for ten minutes:
 

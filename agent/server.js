@@ -26,6 +26,11 @@ const { SettingsStore } = require("./settings-store");
 const { WorkspaceIndex } = require("./workspace-index");
 const { WorkspaceService } = require("./workspace-service");
 const { readBattery } = require("./power-service");
+const { TravelService } = require("./travel-service");
+const { HealthService } = require("./health-service");
+const { CheckpointStore } = require("./checkpoint-store");
+const { UploadService } = require("./upload-service");
+const { assertPairedAccess, pairingAllowed } = require("./access-control");
 
 const PORT = Number(process.env.VERTEX_PORT || 8787);
 const HOST = process.env.VERTEX_HOST || "0.0.0.0";
@@ -44,9 +49,13 @@ const projects = new ProjectIndex();
 const workspaceIndex = new WorkspaceIndex();
 const workspaces = new WorkspaceService({ index:workspaceIndex });
 const files = new FileService({ projects, workspaces:() => listWorkspaces() });
+const uploads = new UploadService({ files });
 const git = new GitService({ projects });
 const docker = new DockerService();
 const settings = new SettingsStore();
+const travel = new TravelService();
+const healthService = new HealthService();
+const checkpoints = new CheckpointStore();
 const WEB_ROOT = fs.existsSync(path.join(__dirname, "..", "dist")) ? path.join(__dirname, "..", "dist") : path.join(__dirname, "..", "web");
 
 function loadToken() {
@@ -87,11 +96,12 @@ function authorizedDevice(request) {
   return devices.findByToken(supplied);
 }
 
-function readJson(request) {
+function readJson(request, maxBytes = 64 * 1024) {
   return new Promise((resolve, reject) => {
-    let body = "";
-    request.on("data", (chunk) => { body += chunk; if (body.length > 64 * 1024) request.destroy(); });
-    request.on("end", () => { try { resolve(JSON.parse(body || "{}")); } catch { reject(new Error("Invalid JSON.")); } });
+    let body = ""; let finished = false;
+    const fail = (error) => { if (finished) return; finished = true; reject(error); };
+    request.on("data", (chunk) => { if (finished) return; body += chunk; if (Buffer.byteLength(body) > maxBytes) { fail(new Error("Request is too large.")); request.destroy(); } });
+    request.on("end", () => { if (finished) return; try { const parsed = JSON.parse(body || "{}"); finished = true; resolve(parsed); } catch { fail(new Error("Invalid JSON.")); } });
     request.on("error", reject);
   });
 }
@@ -108,7 +118,14 @@ function writePairingUrl(url) {
 }
 
 function health() {
-  return { ok:true, hostname:os.hostname(), platform:process.platform, uptimeSeconds:Math.round(process.uptime()), projects:projects.list().length, notification:notifications.status(), preventSleep:settings.read().preventSleep, battery:readBattery(), connectivity:{ transport:relayConfig.relayUrl ? "relay" : "direct", status:relayStatus }, checkedAt:Date.now() };
+  const settingsValue = settings.read(); const agent = healthService.status();
+  return { ok:true, hostname:os.hostname(), platform:process.platform, uptimeSeconds:Math.round(process.uptime()), projects:projects.list().length, notification:notifications.status(), preventSleep:settingsValue.preventSleep, travelMode:travel.status(), agentLocked:settingsValue.agentLocked, battery:readBattery(), connectivity:{ transport:relayConfig.relayUrl ? "relay" : "direct", status:relayStatus, ...agent.relay }, agent, checkedAt:Date.now() };
+}
+
+function updateSettings(values) {
+  const next = settings.update(values);
+  if (Object.hasOwn(values, "travelMode")) next.travelMode ? travel.enable() : travel.disable();
+  return { ...next, travel:travel.status() };
 }
 
 async function listWorkspaces({ refreshProjects = false } = {}) {
@@ -174,6 +191,7 @@ const server = http.createServer(async (request, response) => {
   if (request.method === "GET" && sendVendorFile(request, response)) return;
   if (request.method === "GET" && sendWebFile(request, response)) return;
   if (request.method === "POST" && pathname === "/pair") {
+    try { pairingAllowed(settings.read().agentLocked); } catch (error) { return json(response, 423, { error:error.message }); }
     try {
       const body = await readJson(request);
       const device = devices.pair(body.code, body.name);
@@ -181,6 +199,7 @@ const server = http.createServer(async (request, response) => {
     } catch (error) { return json(response, 400, { error: error.message }); }
   }
   if (!authorized(request)) return json(response, 401, { error: "Unauthorized" });
+  try { assertPairedAccess({ paired:Boolean(authorizedDevice(request)), locked:settings.read().agentLocked }); } catch (error) { return json(response, 423, { error:error.message }); }
   if (pathname === "/sessions" && request.method === "GET") {
     try {
       return json(response, 200, { sessions: await manager.list() });
@@ -202,13 +221,14 @@ const server = http.createServer(async (request, response) => {
   if (pathname === "/activity/test" && request.method === "POST") return json(response, 201, await createTestActivity());
   if (pathname === "/device-health" && request.method === "GET") return json(response, 200, health());
   if (pathname === "/settings" && request.method === "GET") return json(response, 200, settings.read());
-  if (pathname === "/settings" && request.method === "POST") return json(response, 200, settings.update(await readJson(request)));
+  if (pathname === "/settings" && request.method === "POST") return json(response, 200, updateSettings(await readJson(request)));
   if (pathname === "/push-token" && request.method === "POST") {
     const device = authorizedDevice(request); if (!device) return json(response, 403, { error:"A paired device token is required." });
     try { const body = await readJson(request); devices.setPushToken(device.id, body.pushToken); return json(response, 200, { ok:true }); } catch (error) { return json(response, 400, { error:error.message }); }
   }
   if (pathname === "/files" && request.method === "GET") { const query = new URL(request.url, "http://localhost").searchParams; return json(response, 200, await files.list({ projectPath:query.get("project"), relativePath:query.get("path") || "" })); }
   if (pathname === "/files/preview" && request.method === "GET") { const query = new URL(request.url, "http://localhost").searchParams; return json(response, 200, await files.preview({ projectPath:query.get("project"), relativePath:query.get("path") || "" })); }
+  if (pathname === "/uploads" && request.method === "POST") { try { return json(response, 201, { upload:await uploads.upload(await readJson(request, 8 * 1024 * 1024)) }); } catch (error) { return json(response, 400, { error:error.message }); } }
   if (pathname === "/git" && request.method === "GET") { const query = new URL(request.url, "http://localhost").searchParams; return json(response, 200, await git.status({ projectPath:query.get("project") })); }
   if (pathname === "/docker" && request.method === "GET") return json(response, 200, await docker.list());
   if (pathname === "/docker/log" && request.method === "GET") { const query = new URL(request.url, "http://localhost").searchParams; return json(response, 200, await docker.logs({ container:query.get("container") })); }
@@ -224,6 +244,11 @@ const server = http.createServer(async (request, response) => {
   if (pathname === "/workspace-roots" && request.method === "GET") return json(response, 200, { roots:await workspaces.roots() });
   if (pathname === "/workspace-roots" && request.method === "POST") { const body = await readJson(request); return json(response, 201, { roots:await workspaces.addRoot(body.root) }); }
   if (pathname === "/workspaces" && request.method === "POST") { const body = await readJson(request); return json(response, 201, { workspace:await workspaces.create({ root:body.root, name:body.name, initialiseGit:Boolean(body.initialiseGit) }) }); }
+  if (pathname === "/workspaces/launch" && request.method === "POST") { const body = await readJson(request); return json(response, 201, await createWorkspaceAndLaunch(body)); }
+  if (pathname === "/checkpoints" && request.method === "GET") { const query = new URL(request.url, "http://localhost").searchParams; return json(response, 200, { checkpoints:checkpoints.list({ taskId:query.get("taskId"), session:query.get("session") }) }); }
+  if (pathname === "/checkpoints" && request.method === "POST") return json(response, 201, { checkpoint:checkpoints.add(await readJson(request)) });
+  const checkpointMatch = pathname.match(/^\/checkpoints\/([a-f0-9-]+)$/);
+  if (request.method === "DELETE" && checkpointMatch) { checkpoints.remove(checkpointMatch[1]); return json(response, 200, { ok:true }); }
   const diffMatch = pathname.match(/^\/tasks\/([a-f0-9-]+)\/diff$/);
   if (request.method === "GET" && diffMatch) {
     try { return json(response, 200, await diffForTask(diffMatch[1])); } catch (error) { return json(response, 400, { error: error.message }); }
@@ -274,6 +299,17 @@ async function createTask(message) {
   return task;
 }
 
+async function createWorkspaceAndLaunch(message) {
+  const workspace = await workspaces.create({ root:message.root, name:message.name, initialiseGit:Boolean(message.initialiseGit) });
+  const launch = ["terminal", "codex", "claude"].includes(message.launch) ? message.launch : "terminal";
+  const baseName = workspace.name.replace(/[^A-Za-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 42) || "workspace";
+  const sessionName = `${baseName}-${launch}-${Date.now().toString(36)}`.slice(0, 63);
+  if (launch === "terminal") return { workspace, session:await manager.create({ name:sessionName, cwd:workspace.path }) };
+  if (!String(message.prompt || "").trim()) throw new Error(`Describe what ${launch === "codex" ? "Codex" : "Claude"} should do before starting it.`);
+  const task = await createTask({ name:sessionName, cwd:workspace.path, cli:launch, prompt:message.prompt });
+  return { workspace, task };
+}
+
 async function diffForTask(id) {
   const task = tasks.find(id);
   return { task, ...(await diffForTaskService(task)) };
@@ -300,6 +336,7 @@ function attachClient(client) {
       return send(client, { type: "error", message: "Messages must be JSON." });
     }
     try {
+      assertPairedAccess({ paired:Boolean(client.vertexDeviceId), locked:settings.read().agentLocked });
       if (message.type === "list") return send(client, { type: "sessions", requestId: message.requestId, sessions: await manager.list() });
       if (message.type === "listTasks") return send(client, { type: "tasks", requestId: message.requestId, tasks: tasks.sync() });
       if (message.type === "listActivity") return send(client, { type:"activity", requestId:message.requestId, activities:activities.list() });
@@ -307,10 +344,11 @@ function attachClient(client) {
       if (message.type === "testActivity") return send(client, { type:"testActivity", requestId:message.requestId, ...(await createTestActivity()) });
       if (message.type === "getHealth") return send(client, { type:"health", requestId:message.requestId, ...health() });
       if (message.type === "getSettings") return send(client, { type:"settings", requestId:message.requestId, ...settings.read() });
-      if (message.type === "updateSettings") return send(client, { type:"settings", requestId:message.requestId, ...settings.update(message) });
+      if (message.type === "updateSettings") return send(client, { type:"settings", requestId:message.requestId, ...updateSettings(message) });
       if (message.type === "registerPushToken") { if (!client.vertexDeviceId) throw new Error("Push registration requires a paired device."); devices.setPushToken(client.vertexDeviceId, message.pushToken); return send(client, { type:"pushRegistered", requestId:message.requestId, ok:true }); }
       if (message.type === "listFiles") return send(client, { type:"files", requestId:message.requestId, ...(await files.list(message)) });
       if (message.type === "readFile") return send(client, { type:"file", requestId:message.requestId, ...(await files.preview(message)) });
+      if (message.type === "uploadFile") return send(client, { type:"upload", requestId:message.requestId, upload:await uploads.upload(message) });
       if (message.type === "gitStatus") return send(client, { type:"git", requestId:message.requestId, ...(await git.status(message)) });
       if (message.type === "listDocker") return send(client, { type:"docker", requestId:message.requestId, ...(await docker.list()) });
       if (message.type === "dockerLogs") return send(client, { type:"dockerLogs", requestId:message.requestId, ...(await docker.logs(message)) });
@@ -324,6 +362,10 @@ function attachClient(client) {
       if (message.type === "listWorkspaceRoots") return send(client, { type:"workspaceRoots", requestId:message.requestId, roots:await workspaces.roots() });
       if (message.type === "addWorkspaceRoot") return send(client, { type:"workspaceRoots", requestId:message.requestId, roots:await workspaces.addRoot(message.root) });
       if (message.type === "createWorkspace") return send(client, { type:"workspaceCreated", requestId:message.requestId, workspace:await workspaces.create({ root:message.root, name:message.name, initialiseGit:Boolean(message.initialiseGit) }) });
+      if (message.type === "createWorkspaceAndLaunch") return send(client, { type:"workspaceLaunched", requestId:message.requestId, ...(await createWorkspaceAndLaunch(message)) });
+      if (message.type === "listCheckpoints") return send(client, { type:"checkpoints", requestId:message.requestId, checkpoints:checkpoints.list(message) });
+      if (message.type === "createCheckpoint") return send(client, { type:"checkpoint", requestId:message.requestId, checkpoint:checkpoints.add(message) });
+      if (message.type === "deleteCheckpoint") { checkpoints.remove(message.id); return send(client, { type:"checkpointDeleted", requestId:message.requestId, ok:true }); }
       if (message.type === "taskDiff") return send(client, { type: "diff", requestId: message.requestId, ...(await diffForTask(message.id)) });
       if (message.type === "respondToTaskApproval") return send(client, { type:"taskApproval", requestId:message.requestId, task:await respondToTaskApproval({ id:message.id, choice:message.choice }) });
       if (message.type === "reviewTask") return send(client, { type: "reviewed", requestId: message.requestId, task: tasks.review(message.id, message.decision) });
@@ -365,11 +407,12 @@ setInterval(() => { void taskMonitor.poll().catch(() => {}); }, 5000).unref();
 if (relayConfig.relayUrl) {
   const relay = new RelayClient({ relayUrl: relayConfig.relayUrl, machineId: relayConfig.machineId, devices, pairingKey: (code) => devices.pairingKey(code) });
   const relayClients = new Map();
-  relay.on("online", () => { relayStatus = "connected"; console.log(`Vertex relay connected for machine ${relayConfig.machineId}`); });
-  relay.on("offline", () => { relayStatus = "reconnecting"; console.log("Vertex relay disconnected; retrying…"); });
+  relay.on("online", () => { relayStatus = "connected"; healthService.relayConnected(); console.log(`Vertex relay connected for machine ${relayConfig.machineId}`); });
+  relay.on("offline", () => { relayStatus = "reconnecting"; healthService.relayDisconnected(); console.log("Vertex relay disconnected; retrying…"); });
   relay.on("message", ({ message, keyId, pairCode }) => {
     if (keyId === "pair") {
       if (message.type !== "pair" || message.code !== pairCode) return;
+      try { pairingAllowed(settings.read().agentLocked); } catch { return; }
       try {
         const device = devices.pair(pairCode, message.name);
         relay.send({ keyId: "pair", pairCode, message: { type: "paired", device: { id: device.id, name: device.name }, key: device.relayKey } });
@@ -391,6 +434,8 @@ if (relayConfig.relayUrl) {
   });
   relay.start();
 }
+
+if (settings.read().travelMode) travel.enable();
 
 server.listen(PORT, HOST, () => {
   console.log(`Vertex agent listening on http://${HOST}:${PORT}`);
