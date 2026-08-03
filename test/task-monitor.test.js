@@ -4,7 +4,8 @@ const { TaskMonitor, attentionFromOutput, plain } = require("../agent/task-monit
 
 test("task monitor identifies an approval-like terminal prompt", () => {
   const attention = attentionFromOutput("\u001b[32mCodex changed 2 files\u001b[0m\nAllow this command? [y/n]");
-  assert.equal(attention.kind, "approval"); assert.match(attention.message, /Allow this command/);
+  assert.equal(attention.kind, "approval"); assert.equal(attention.canApprove, true); assert.match(attention.message, /Allow this command/);
+  assert.equal(attentionFromOutput("Continue with this deployment?").canApprove, false);
   assert.equal(attentionFromOutput("Compiling project…\nFinished in 2s"), null);
   assert.equal(plain("\u001b[31mfailed\u001b[0m"), "failed");
 });

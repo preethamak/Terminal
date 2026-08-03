@@ -6,7 +6,8 @@ function attentionFromOutput(output) {
   const lines = plain(output).split("\n").map((line) => line.trim()).filter(Boolean).slice(-12);
   const relevant = lines.reverse().find((line) => /(?:\[\s*[yn]\s*(?:\/|\\)\s*[yn]\s*\]|\(\s*y(?:es)?\s*\/\s*n(?:o)?\s*\)|\b(?:approve|allow|permission|proceed|continue)\b)/i.test(line));
   if (!relevant) return null;
-  return { kind:"approval", message:relevant.slice(0, 280), signature:crypto.createHash("sha256").update(relevant).digest("hex") };
+  const canApprove = /(?:\[\s*y\s*(?:\/|\\)\s*n\s*\]|\(\s*y(?:es)?\s*\/\s*n(?:o)?\s*\))/i.test(relevant);
+  return { kind:"approval", canApprove, message:relevant.slice(0, 280), signature:crypto.createHash("sha256").update(relevant).digest("hex") };
 }
 
 class TaskMonitor {

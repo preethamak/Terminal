@@ -95,6 +95,13 @@ class SessionManager {
     return { name, stopped:true };
   }
 
+  async sendApproval(name, choice) {
+    if (!SESSION_NAME.test(name || "")) throw new Error("Invalid session name.");
+    if (choice !== "y" && choice !== "n") throw new Error("Approval choice must be y or n.");
+    await execFileAsync("tmux", ["send-keys", "-t", name, choice, "Enter"]);
+    return { name, choice };
+  }
+
   attach(name, { onData, onExit }) {
     if (!SESSION_NAME.test(name || "")) throw new Error("Invalid session name.");
     const terminal = pty.spawn("tmux", ["attach-session", "-t", name], {

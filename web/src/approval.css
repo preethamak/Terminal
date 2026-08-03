@@ -1,0 +1,22 @@
+.approval-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.approval-actions .primary-button { grid-column: 1; margin: 0; }
+.approval-decline {
+  grid-column: 2;
+  padding: 12px 13px;
+  border: 1px solid #70414a;
+  border-radius: 13px;
+  color: #ffc0c9;
+  background: #351f27;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.approval-actions small { grid-column: 1 / -1; color: #94a1ba; font-size: 10px; line-height: 1.4; }
+.approval-actions code { color: #c7d2ff; font: inherit; }
+.task-terminal-button { display: flex; align-items: center; justify-content: space-between; }

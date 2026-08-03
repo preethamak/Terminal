@@ -222,6 +222,10 @@ const server = http.createServer(async (request, response) => {
   if (request.method === "POST" && reviewMatch) {
     try { const body = await readJson(request); return json(response, 200, { task: tasks.review(reviewMatch[1], body.decision) }); } catch (error) { return json(response, 400, { error: error.message }); }
   }
+  const approvalMatch = pathname.match(/^\/tasks\/([a-f0-9-]+)\/approval$/);
+  if (request.method === "POST" && approvalMatch) {
+    try { const body = await readJson(request); return json(response, 200, { task:await respondToTaskApproval({ id:approvalMatch[1], choice:body.choice }) }); } catch (error) { return json(response, 400, { error:error.message }); }
+  }
   return json(response, 404, { error: "Not found" });
 });
 
@@ -265,6 +269,15 @@ async function diffForTask(id) {
   return { task, ...(await diffForTaskService(task)) };
 }
 
+async function respondToTaskApproval({ id, choice }) {
+  const task = tasks.find(id);
+  if (!task?.attention || task.attention.kind !== "approval" || !task.attention.canApprove) throw new Error("This task does not have a verified y/n approval prompt.");
+  await manager.sendApproval(task.sessionName || task.name, choice);
+  const updated = tasks.update(task.id, { status:"running", attention:null, lastActivityAt:Date.now() });
+  activities.add({ type:"approval_sent", taskId:task.id, session:task.sessionName || task.name, title:choice === "y" ? "Approval sent" : "Approval declined", detail:task.name, fingerprint:`approval:${task.id}:${task.attention.signature}:${choice}` });
+  return updated;
+}
+
 function attachClient(client) {
   let terminal; let attachedName = null;
   send(client, { type: "ready" });
@@ -301,6 +314,7 @@ function attachClient(client) {
       if (message.type === "addWorkspaceRoot") return send(client, { type:"workspaceRoots", requestId:message.requestId, roots:await workspaces.addRoot(message.root) });
       if (message.type === "createWorkspace") return send(client, { type:"workspaceCreated", requestId:message.requestId, workspace:await workspaces.create({ root:message.root, name:message.name, initialiseGit:Boolean(message.initialiseGit) }) });
       if (message.type === "taskDiff") return send(client, { type: "diff", requestId: message.requestId, ...(await diffForTask(message.id)) });
+      if (message.type === "respondToTaskApproval") return send(client, { type:"taskApproval", requestId:message.requestId, task:await respondToTaskApproval({ id:message.id, choice:message.choice }) });
       if (message.type === "reviewTask") return send(client, { type: "reviewed", requestId: message.requestId, task: tasks.review(message.id, message.decision) });
       if (message.type === "create") return send(client, { type: "created", requestId: message.requestId, session: await manager.create(message) });
       if (message.type === "createSession") return send(client, { type: "created", requestId: message.requestId, session: await manager.create({ name:message.name, cwd:message.cwd }) });
