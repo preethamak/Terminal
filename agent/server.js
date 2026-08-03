@@ -332,7 +332,7 @@ async function respondToTaskApproval({ id, choice }) {
 }
 
 function attachClient(client) {
-  let terminal; let attachedName = null;
+  let terminal; let attachedName = null; let terminalSize = null;
   send(client, { type: "ready" });
 
   client.on("message", async (raw) => {
@@ -390,13 +390,15 @@ function attachClient(client) {
           onData: (data) => sequencer.next(data),
           onExit: ({ exitCode }) => send(client, { type: "closed", exitCode }),
         });
+        if (terminalSize) terminal.resize(terminalSize.cols, terminalSize.rows);
         return send(client, { type: "attached", name: message.name });
       }
       if (message.type === "input" && terminal) { const task = tasks.findBySession(attachedName); if (task?.attention) tasks.update(task.id, { attention:null, status:"running" }); return terminal.write(String(message.data || "")); }
       if (message.type === "resize" && terminal) {
         const size = validateResize(message);
-        return terminal.resize(size.cols, size.rows);
+        terminalSize = size; return terminal.resize(size.cols, size.rows);
       }
+      if (message.type === "resize") { terminalSize = validateResize(message); return; }
       return send(client, { type: "error", message: "Unknown message or no attached session." });
     } catch (error) {
       send(client, { type: "error", message: error.message });

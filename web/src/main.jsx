@@ -338,7 +338,7 @@ function TerminalView({ vertex, session, onClose, onSwitch }) {
       const receive = (event) => {
         if (event.type === "terminalSnapshot") { term.reset(); term.write(event.data, updateFollowState); output.current = { expected:event.sequence + 1, pending:new Map(), scheduled:false }; resize(); }
         if (event.type === "output" && event.sequence >= output.current.expected && !output.current.pending.has(event.sequence)) { output.current.pending.set(event.sequence,event.data); if (!output.current.scheduled) { output.current.scheduled = true; requestAnimationFrame(flush); } }
-        if (event.type === "attached") setStatus("Live"); if (event.type === "error") setStatus(event.message);
+        if (event.type === "attached") { setStatus("Live"); requestAnimationFrame(resize); } if (event.type === "error") setStatus(event.message);
       };
       const onTouchStart = (event) => { if (event.touches.length === 2) { const [first, second] = event.touches; pinchDistance.current = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY); touchY.current = null; return; } touchY.current = event.touches[0]?.clientY ?? null; };
       const onTouchMove = (event) => {
