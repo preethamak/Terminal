@@ -4,8 +4,25 @@ import { VertexRelayClient } from "../relay-client.js";
 import jsQR from "jsqr";
 import "./styles.css";
 import "./accessibility.css";
+import "./pairing.css";
 
 const stored = (key) => { try { return JSON.parse(localStorage.getItem(key) || "null"); } catch { return null; } };
+const storageAvailable = () => {
+  try {
+    const key = "vertex.storage-check";
+    localStorage.setItem(key, "ok");
+    const available = localStorage.getItem(key) === "ok";
+    localStorage.removeItem(key);
+    return available;
+  } catch { return false; }
+};
+const saveStored = (key, value) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    const saved = stored(key);
+    return JSON.stringify(saved) === JSON.stringify(value);
+  } catch { return false; }
+};
 const initials = (value = "Vertex") => value.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 const formatTime = (time) => new Intl.DateTimeFormat(undefined, { hour:"numeric", minute:"2-digit" }).format(time || Date.now());
 const shortPath = (value) => value ? value.replace(/^\/home\/[^/]+/, "~") : "Local terminal";
@@ -13,6 +30,7 @@ const shortPath = (value) => value ? value.replace(/^\/home\/[^/]+/, "~") : "Loc
 function useVertex() {
   const [token, setToken] = useState(() => localStorage.getItem("vertex.token"));
   const [relay, setRelay] = useState(() => stored("vertex.relay"));
+  const [storage, setStorage] = useState(() => ({ available:storageAvailable(), persisted:null, lastWriteVerified:Boolean(stored("vertex.relay")) }));
   const [status, setStatus] = useState("Connecting to your laptop…");
   const [data, setData] = useState({ tasks:[], sessions:[], projects:[], workspaces:[], workspaceRoots:[], activities:[], health:null, settings:{ preventSleep:true }, docker:{ available:false, containers:[] } });
   const relayClient = useRef(null); const pending = useRef(new Map()); const terminalListener = useRef(() => {});
@@ -72,11 +90,15 @@ function useVertex() {
   }, [relay]);
   useEffect(() => { if (token || relay) refresh(); }, [token, relay, refresh]);
   useEffect(() => { const timer = setInterval(() => { if (token || relay) refresh(); }, 12000); return () => clearInterval(timer); }, [token, relay, refresh]);
+  useEffect(() => {
+    if (!navigator.storage?.persisted) return;
+    navigator.storage.persisted().then((persisted) => setStorage((current) => ({ ...current, persisted }))).catch(() => {});
+  }, []);
   const send = useCallback((message, directSocket) => { if (relay) relayClient.current?.send(message); else if (directSocket?.readyState === WebSocket.OPEN) directSocket.send(JSON.stringify(message)); }, [relay]);
-  const forget = useCallback(() => { localStorage.removeItem("vertex.token"); localStorage.removeItem("vertex.relay"); setToken(null); setRelay(null); setData({ tasks:[], sessions:[], projects:[], workspaces:[], workspaceRoots:[], activities:[], health:null, settings:{ preventSleep:true }, docker:{ available:false, containers:[] } }); }, []);
-  const saveToken = useCallback((value) => { localStorage.setItem("vertex.token", value); setToken(value); }, []);
-  const saveRelay = useCallback((value) => { localStorage.setItem("vertex.relay", JSON.stringify(value)); setRelay(value); }, []);
-  return useMemo(() => ({ token, relay, status, data, setStatus, direct, request, refresh, discoverProjects, send, terminalListener, setToken:saveToken, setRelay:saveRelay, forget }), [token, relay, status, data, direct, request, refresh, discoverProjects, send, saveToken, saveRelay, forget]);
+  const forget = useCallback(() => { localStorage.removeItem("vertex.token"); localStorage.removeItem("vertex.relay"); setToken(null); setRelay(null); setStorage((current) => ({ ...current, lastWriteVerified:false })); setData({ tasks:[], sessions:[], projects:[], workspaces:[], workspaceRoots:[], activities:[], health:null, settings:{ preventSleep:true }, docker:{ available:false, containers:[] } }); }, []);
+  const saveToken = useCallback((value) => { try { localStorage.setItem("vertex.token", value); const verified = localStorage.getItem("vertex.token") === value; setStorage((current) => ({ ...current, available:storageAvailable(), lastWriteVerified:verified })); setToken(value); return verified; } catch { setStorage((current) => ({ ...current, available:false, lastWriteVerified:false })); setToken(value); return false; } }, []);
+  const saveRelay = useCallback((value) => { const verified = saveStored("vertex.relay", value); setStorage((current) => ({ ...current, available:storageAvailable(), lastWriteVerified:verified })); setRelay(value); if (verified && navigator.storage?.persist) navigator.storage.persist().then((persisted) => setStorage((current) => ({ ...current, persisted }))).catch(() => {}); return verified; }, []);
+  return useMemo(() => ({ token, relay, storage, status, data, setStatus, direct, request, refresh, discoverProjects, send, terminalListener, setToken:saveToken, setRelay:saveRelay, forget }), [token, relay, storage, status, data, direct, request, refresh, discoverProjects, send, saveToken, saveRelay, forget]);
 }
 
 function App() {
@@ -91,13 +113,13 @@ function App() {
         setPairingStatus("Connecting securely to your laptop…");
         const timeout = setTimeout(() => { client.close(); setPairingStatus("Pairing did not finish. This link may be expired, already used, or your laptop agent is offline. Run npm run pair on the laptop for a fresh link."); }, 12_000);
         client.onstatus = (status) => { if (status === "online") setPairingStatus("Laptop found. Completing secure pairing…"); };
-        client.onmessage = (message) => { if (message.type !== "paired") return; clearTimeout(timeout); client.close(); history.replaceState({}, "", location.pathname); vertex.setRelay({ relay:pairing.relay, machine:pairing.machine, keyId:message.device.id, key:message.key }); setPairingStatus("Paired. Opening your laptop…"); setScreen("home"); };
+        client.onmessage = (message) => { if (message.type !== "paired") return; clearTimeout(timeout); client.close(); history.replaceState({}, "", location.pathname); const saved = vertex.setRelay({ relay:pairing.relay, machine:pairing.machine, keyId:message.device.id, key:message.key }); setPairingStatus(saved ? "Paired and saved on this phone. Opening your laptop…" : "Paired for this visit, but Android did not save the connection. Check the app storage setting before closing Vertex."); setScreen("home"); };
         client.connect(); client.send({ type:"pair", code:pairing.code, name:`Android (${navigator.platform})` });
       } catch { setPairingStatus("That pairing link is invalid. Run npm run pair on the laptop and use the new link."); setScreen("welcome"); }
       return;
     }
     setPairingStatus("Pairing with your laptop…");
-    fetch("/pair", { method:"POST", headers:{ "content-type":"application/json" }, body:JSON.stringify({ code:pair, name:`Android (${navigator.platform})` }) }).then((response) => response.json()).then((body) => { if (!body.token) throw new Error(body.error); history.replaceState({}, "", location.pathname); vertex.setToken(body.token); setPairingStatus("Paired. Opening your laptop…"); setScreen("home"); }).catch(() => setPairingStatus("Pairing did not finish. Generate a fresh QR on the laptop and try again."));
+    fetch("/pair", { method:"POST", headers:{ "content-type":"application/json" }, body:JSON.stringify({ code:pair, name:`Android (${navigator.platform})` }) }).then((response) => response.json()).then((body) => { if (!body.token) throw new Error(body.error); history.replaceState({}, "", location.pathname); const saved = vertex.setToken(body.token); setPairingStatus(saved ? "Paired and saved on this phone. Opening your laptop…" : "Paired for this visit, but Android did not save the connection. Check the app storage setting before closing Vertex."); setScreen("home"); }).catch(() => setPairingStatus("Pairing did not finish. Generate a fresh QR on the laptop and try again."));
   }, [vertex.token, vertex.relay]);
   if (screen === "welcome") return <Welcome pairingStatus={pairingStatus} onConnect={(value) => { vertex.setToken(value); setScreen("home"); }} />;
   if (screen === "terminal") return <TerminalView vertex={vertex} session={selected} onClose={() => { setScreen("home"); vertex.refresh(); }} onSwitch={setSelected} />;
@@ -163,7 +185,7 @@ function QrScanner({ close }) {
       frame.current = requestAnimationFrame(scan);
     } catch (error) {
       const denied = error?.name === "NotAllowedError";
-      setMessage(denied ? "Camera access is off. In Android Settings → Apps → Vertex → Permissions, allow Camera, then try again." : "This wrapper cannot open the camera. Open Vertex in Android Chrome to scan, or use the pairing-link fallback on the first screen.");
+      setMessage(denied ? "Camera access is off. In Android Settings → Apps → Vertex → Permissions, allow Camera, then try again." : "This app cannot open the camera yet. Use the pairing-link fallback on the first screen; it pairs this app directly.");
     }
   };
   useEffect(() => () => { scanning.current = false; cancelAnimationFrame(frame.current); stream.current?.getTracks().forEach((track) => track.stop()); }, []);
@@ -195,13 +217,17 @@ function ProfilePanel({ vertex, close }) {
   const revoke = async (device) => { if (!window.confirm(`Remove ${device.name} from Vertex? It will lose access immediately.`)) return; try { await vertex.request("revokeDevice", { id:device.id }); await load(); } catch (caught) { setError(caught.message); } };
   const toggleSleep = async () => { const next = !preventSleep; setPreventSleep(next); try { await vertex.request("updateSettings", { preventSleep:next }); await vertex.refresh(); } catch (caught) { setPreventSleep(!next); setError(caught.message); } };
   if (setup) return <SetupPanel vertex={vertex} close={() => setSetup(false)}/>;
-  return <><p className="kicker">VERTEX DEVICE</p><h2>Your private workspace</h2><div className="profile-row"><span className="avatar">A</span><div><strong>{vertex.data.health?.hostname || "Paired laptop"}</strong><small>{vertex.status} · {vertex.data.health?.projects || 0} projects</small></div><i className="status-dot running"/></div><p className="kicker">RUNNING TASKS</p><button className={`setting-toggle ${preventSleep ? "enabled" : ""}`} onClick={toggleSleep}><span><strong>Keep laptop awake</strong><small>Only while a Vertex task is running</small></span><b>{preventSleep ? "On" : "Off"}</b></button><p className="kicker">PAIRED DEVICES</p><div className="device-list">{devices.map((device) => <div key={device.id}><span>◉</span><p><strong>{device.name}</strong><small>{device.revoked ? "Revoked" : "Active"}</small></p>{!device.revoked && <button onClick={() => revoke(device)}>Revoke</button>}</div>)}</div>{error && <p className="form-error">{error}</p>}<button className="secondary-button setup-button" onClick={() => setSetup(true)}>Setup & test Vertex <span>→</span></button><button className="danger-button" onClick={() => { vertex.forget(); close(); }}>Forget this laptop</button></>;
+  const pairingReady = Boolean(vertex.relay && vertex.storage.available && vertex.storage.lastWriteVerified);
+  const pairingDetail = !vertex.storage.available ? "Android blocked local app storage. Pairing will disappear when you close Vertex." : !vertex.storage.lastWriteVerified ? "Vertex could not verify its saved connection." : vertex.storage.persisted === false ? "Saved locally. Android has not marked app storage as persistent." : "Saved locally. Closing and reopening Vertex should return you here.";
+  return <><p className="kicker">VERTEX DEVICE</p><h2>Your private workspace</h2><div className="profile-row"><span className="avatar">A</span><div><strong>{vertex.data.health?.hostname || "Paired laptop"}</strong><small>{vertex.status} · {vertex.data.health?.projects || 0} projects</small></div><i className="status-dot running"/></div><p className="kicker">PHONE PAIRING</p><article className={`pairing-storage ${pairingReady ? "ready" : "needs-setup"}`}><span>{pairingReady ? "✓" : "!"}</span><div><strong>{pairingReady ? "Pairing saved on this phone" : "Pairing may not survive closing the app"}</strong><small>{pairingDetail}</small></div></article><p className="kicker">RUNNING TASKS</p><button className={`setting-toggle ${preventSleep ? "enabled" : ""}`} onClick={toggleSleep}><span><strong>Keep laptop awake</strong><small>Only while a Vertex task is running</small></span><b>{preventSleep ? "On" : "Off"}</b></button><p className="kicker">PAIRED DEVICES</p><div className="device-list">{devices.map((device) => <div key={device.id}><span>◉</span><p><strong>{device.name}</strong><small>{device.revoked ? "Revoked" : "Active"}</small></p>{!device.revoked && <button onClick={() => revoke(device)}>Revoke</button>}</div>)}</div>{error && <p className="form-error">{error}</p>}<button className="secondary-button setup-button" onClick={() => setSetup(true)}>Setup & test Vertex <span>→</span></button><button className="danger-button" onClick={() => { vertex.forget(); close(); }}>Forget this laptop</button></>;
 }
 
 function SetupPanel({ vertex, close }) {
   const [message, setMessage] = useState(""); const [testing, setTesting] = useState(false); const health = vertex.data.health; const notification = health?.notification;
+  const pairingReady = Boolean(vertex.relay && vertex.storage.available && vertex.storage.lastWriteVerified);
+  const pairingDetail = !vertex.storage.available ? "Android blocked local app storage; check the Nativine app’s storage settings." : !vertex.storage.lastWriteVerified ? "Vertex did not confirm the encrypted connection was saved." : vertex.storage.persisted === false ? "Saved locally, but Android has not marked the app’s storage as persistent." : "Saved locally and verified. Force-close Vertex, then reopen it once to confirm.";
   const testActivity = async () => { setTesting(true); setMessage(""); try { await vertex.request("testActivity"); await vertex.refresh(); setMessage("Test received. You can now see it in Home → Activity."); } catch (caught) { setMessage(caught.message); } finally { setTesting(false); } };
-  return <><p className="kicker">SETUP & TEST</p><h2>Check Vertex yourself</h2><p className="muted-copy setup-intro">These checks are real. They show what works on your laptop today and what still needs a native Android or Firebase setup.</p><div className="setup-checks"><SetupCheck ready={Boolean(health?.ok)} title="Encrypted laptop link" detail={health?.ok ? `Connected to ${health.hostname}` : "Reconnect your laptop agent"}/><SetupCheck ready={vertex.data.sessions.length > 0} title="Persistent terminals" detail={vertex.data.sessions.length ? `${vertex.data.sessions.length} terminal${vertex.data.sessions.length === 1 ? "" : "s"} ready to resume` : "Open a terminal to test this"}/><SetupCheck ready={vertex.data.projects.length > 0} title="Project discovery" detail={vertex.data.projects.length ? `${vertex.data.projects.length} project${vertex.data.projects.length === 1 ? "" : "s"} found` : "Use Find projects on laptop"}/><SetupCheck ready title="In-app activity" detail="Ready to test over your encrypted connection"/><SetupCheck ready={Boolean(notification?.firebaseConfigured)} title="Background push" detail={notification?.firebaseConfigured ? "Firebase configuration detected" : "Needs Firebase + Nativine Android setup"}/><SetupCheck ready={false} title="Biometric lock" detail="Needs a Nativine native biometric bridge"/></div><button className="primary-button" disabled={testing || !health?.ok} onClick={testActivity}>{testing ? "Sending test…" : "Send in-app activity test"}<span>→</span></button>{message && <p className={message.includes("received") ? "setup-success" : "form-error"}>{message}</p>}<p className="setup-foot">The test safely writes one activity event on your laptop. It does not run a terminal command or send terminal text to Vertex servers.</p><button className="secondary-button" onClick={close}>‹ Back to account</button></>;
+  return <><p className="kicker">SETUP & TEST</p><h2>Check Vertex yourself</h2><p className="muted-copy setup-intro">These checks are real. They show what works on your laptop today and what still needs a native Android or Firebase setup.</p><div className="setup-checks"><SetupCheck ready={pairingReady} title="Pairing remembered" detail={pairingDetail}/><SetupCheck ready={Boolean(health?.ok)} title="Encrypted laptop link" detail={health?.ok ? `Connected to ${health.hostname}` : "Reconnect your laptop agent"}/><SetupCheck ready={vertex.data.sessions.length > 0} title="Persistent terminals" detail={vertex.data.sessions.length ? `${vertex.data.sessions.length} terminal${vertex.data.sessions.length === 1 ? "" : "s"} ready to resume` : "Open a terminal to test this"}/><SetupCheck ready={vertex.data.projects.length > 0} title="Project discovery" detail={vertex.data.projects.length ? `${vertex.data.projects.length} project${vertex.data.projects.length === 1 ? "" : "s"} found` : "Use Find projects on laptop"}/><SetupCheck ready title="In-app activity" detail="Ready to test over your encrypted connection"/><SetupCheck ready={Boolean(notification?.firebaseConfigured)} title="Background push" detail={notification?.firebaseConfigured ? "Firebase configuration detected" : "Needs Firebase + Nativine Android setup"}/><SetupCheck ready={false} title="Biometric lock" detail="Needs a Nativine native biometric bridge"/></div><button className="primary-button" disabled={testing || !health?.ok} onClick={testActivity}>{testing ? "Sending test…" : "Send in-app activity test"}<span>→</span></button>{message && <p className={message.includes("received") ? "setup-success" : "form-error"}>{message}</p>}<p className="setup-foot">The test safely writes one activity event on your laptop. It does not run a terminal command or send terminal text to Vertex servers.</p><button className="secondary-button" onClick={close}>‹ Back to account</button></>;
 }
 
 function SetupCheck({ ready, title, detail }) { return <article className={`setup-check ${ready ? "ready" : "needs-setup"}`}><span>{ready ? "✓" : "!"}</span><div><strong>{title}</strong><small>{detail}</small></div><b>{ready ? "Ready" : "Setup"}</b></article>; }

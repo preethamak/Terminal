@@ -1,0 +1,29 @@
+.pairing-storage {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  padding: 13px;
+  margin: 8px 0 18px;
+  border: 1px solid #2f3c39;
+  border-radius: 14px;
+  background: #102019;
+}
+
+.pairing-storage.needs-setup { border-color: #6a4548; background: #26181c; }
+
+.pairing-storage > span {
+  display: grid;
+  place-items: center;
+  flex: 0 0 25px;
+  height: 25px;
+  border-radius: 50%;
+  color: #07150d;
+  background: #75e8b0;
+  font-weight: 900;
+}
+
+.pairing-storage.needs-setup > span { color: #2c1217; background: #ffacb8; }
+.pairing-storage div { display: grid; gap: 3px; }
+.pairing-storage strong { font-size: 12px; }
+.pairing-storage small { color: #a0b2ad; font-size: 10px; line-height: 1.4; }
+.pairing-storage.needs-setup small { color: #d0a7ae; }
