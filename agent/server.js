@@ -36,8 +36,8 @@ const execFileAsync = promisify(execFile);
 const tasks = new TaskStore();
 const devices = new DeviceStore();
 const activities = new ActivityStore();
-const notifications = new NotificationService({ activities });
-const taskMonitor = new TaskMonitor({ tasks, manager, activities });
+const notifications = new NotificationService({ activities, devices });
+const taskMonitor = new TaskMonitor({ tasks, manager, activities, notifications });
 const relayConfig = new RelayConfig().ensure();
 let relayStatus = relayConfig.relayUrl ? "connecting" : "direct";
 const projects = new ProjectIndex();
@@ -80,6 +80,11 @@ function authorized(request) {
   const expected = Buffer.from(token);
   const actual = Buffer.from(supplied);
   return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+}
+
+function authorizedDevice(request) {
+  const supplied = request.headers.authorization?.replace(/^Bearer\s+/i, "") || new URL(request.url, "http://localhost").searchParams.get("token");
+  return devices.findByToken(supplied);
 }
 
 function readJson(request) {
@@ -197,6 +202,10 @@ const server = http.createServer(async (request, response) => {
   if (pathname === "/device-health" && request.method === "GET") return json(response, 200, health());
   if (pathname === "/settings" && request.method === "GET") return json(response, 200, settings.read());
   if (pathname === "/settings" && request.method === "POST") return json(response, 200, settings.update(await readJson(request)));
+  if (pathname === "/push-token" && request.method === "POST") {
+    const device = authorizedDevice(request); if (!device) return json(response, 403, { error:"A paired device token is required." });
+    try { const body = await readJson(request); devices.setPushToken(device.id, body.pushToken); return json(response, 200, { ok:true }); } catch (error) { return json(response, 400, { error:error.message }); }
+  }
   if (pathname === "/files" && request.method === "GET") { const query = new URL(request.url, "http://localhost").searchParams; return json(response, 200, await files.list({ projectPath:query.get("project"), relativePath:query.get("path") || "" })); }
   if (pathname === "/files/preview" && request.method === "GET") { const query = new URL(request.url, "http://localhost").searchParams; return json(response, 200, await files.preview({ projectPath:query.get("project"), relativePath:query.get("path") || "" })); }
   if (pathname === "/git" && request.method === "GET") { const query = new URL(request.url, "http://localhost").searchParams; return json(response, 200, await git.status({ projectPath:query.get("project") })); }
@@ -232,7 +241,7 @@ const server = http.createServer(async (request, response) => {
 const websocket = new WebSocketServer({ noServer: true });
 server.on("upgrade", (request, socket, head) => {
   if (!authorized(request)) return socket.destroy();
-  websocket.handleUpgrade(request, socket, head, (client) => websocket.emit("connection", client));
+  websocket.handleUpgrade(request, socket, head, (client) => { client.vertexDeviceId = authorizedDevice(request)?.id || null; websocket.emit("connection", client); });
 });
 
 function send(client, message) {
@@ -298,6 +307,7 @@ function attachClient(client) {
       if (message.type === "getHealth") return send(client, { type:"health", requestId:message.requestId, ...health() });
       if (message.type === "getSettings") return send(client, { type:"settings", requestId:message.requestId, ...settings.read() });
       if (message.type === "updateSettings") return send(client, { type:"settings", requestId:message.requestId, ...settings.update(message) });
+      if (message.type === "registerPushToken") { if (!client.vertexDeviceId) throw new Error("Push registration requires a paired device."); devices.setPushToken(client.vertexDeviceId, message.pushToken); return send(client, { type:"pushRegistered", requestId:message.requestId, ok:true }); }
       if (message.type === "listFiles") return send(client, { type:"files", requestId:message.requestId, ...(await files.list(message)) });
       if (message.type === "readFile") return send(client, { type:"file", requestId:message.requestId, ...(await files.preview(message)) });
       if (message.type === "gitStatus") return send(client, { type:"git", requestId:message.requestId, ...(await git.status(message)) });
@@ -370,6 +380,7 @@ if (relayConfig.relayUrl) {
       const { EventEmitter } = require("node:events");
       client = new EventEmitter();
       client.readyState = 1; client.OPEN = 1;
+      client.vertexDeviceId = keyId;
       client.send = (serialized) => relay.send({ keyId, message: JSON.parse(serialized) });
       client.kill = () => client.emit("close");
       relayClients.set(keyId, client);

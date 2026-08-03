@@ -2,6 +2,9 @@ name = "vertex-relay"
 main = "worker.js"
 compatibility_date = "2026-08-02"
 
+[vars]
+VERTEX_APP_URL = "https://vertex-cyan-phi.vercel.app"
+
 [[durable_objects.bindings]]
 name = "MACHINE_RELAY"
 class_name = "MachineRelay"

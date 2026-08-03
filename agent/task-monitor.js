@@ -11,7 +11,13 @@ function attentionFromOutput(output) {
 }
 
 class TaskMonitor {
-  constructor({ tasks, manager, activities }) { this.tasks = tasks; this.manager = manager; this.activities = activities; this.polling = null; }
+  constructor({ tasks, manager, activities, notifications = null }) { this.tasks = tasks; this.manager = manager; this.activities = activities; this.notifications = notifications; this.polling = null; }
+
+  async announce(payload) {
+    const activity = this.activities.add(payload); if (!activity || !this.notifications) return activity;
+    try { await this.notifications.send(activity); } catch (error) { console.error(`Vertex push delivery failed: ${error.message}`); }
+    return activity;
+  }
 
   async poll() {
     if (this.polling) return this.polling;
@@ -30,14 +36,14 @@ class TaskMonitor {
       const patch = { outputDigest:digest, lastActivityAt:Date.now(), lastOutput:snapshot.slice(-700) };
       if (attention) {
         patch.status = "waiting"; patch.attention = attention;
-        this.activities.add({ type:"attention", taskId:task.id, session:task.sessionName || task.name, title:"AI task needs your input", detail:attention.message, fingerprint:`attention:${task.id}:${attention.signature}` });
+        await this.announce({ type:"attention", taskId:task.id, session:task.sessionName || task.name, title:"AI task needs your input", detail:attention.message, fingerprint:`attention:${task.id}:${attention.signature}` });
       } else if (task.status === "waiting") { patch.status = "running"; patch.attention = null; }
       this.tasks.update(task.id, patch);
     }
     for (const task of this.tasks.sync({ includeArchived:true })) {
       if (!task.finishedAt || task.completionNotifiedAt) continue;
       const failed = task.status === "failed";
-      this.activities.add({ type:failed ? "failed" : "completed", taskId:task.id, session:task.sessionName || task.name, title:failed ? "Task failed" : "Task completed", detail:task.name, fingerprint:`completion:${task.id}:${task.status}` });
+      await this.announce({ type:failed ? "failed" : "completed", taskId:task.id, session:task.sessionName || task.name, title:failed ? "Task failed" : "Task completed", detail:task.name, fingerprint:`completion:${task.id}:${task.status}` });
       this.tasks.update(task.id, { completionNotifiedAt:Date.now() });
     }
     return this.tasks.list();

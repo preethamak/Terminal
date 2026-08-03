@@ -1,3 +1,5 @@
+import { sendPush } from "./push.js";
+
 // Cloudflare Worker + Durable Object relay. It only routes opaque frames.
 // Deploy later with `wrangler deploy`; no Cloudflare account is required to develop Vertex.
 export class MachineRelay {
@@ -27,6 +29,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === "/health") return Response.json({ ok: true });
+    if (url.pathname === "/v1/push" && request.method === "POST") return sendPush(request, env);
     if (url.pathname !== "/v1/connect") return new Response("Not found", { status: 404 });
     const machine = url.searchParams.get("machine");
     if (!machine || !/^[a-f0-9-]{36}$/i.test(machine)) return new Response("Invalid machine", { status: 400 });

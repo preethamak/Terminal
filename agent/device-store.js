@@ -46,7 +46,21 @@ class DeviceStore {
     return device?.relayKey || null;
   }
 
-  revoke(id) { const devices = this.read(); const device = devices.find((entry) => entry.id === id); if (!device) throw new Error("Device not found."); device.revoked = true; this.write(devices); }
+  setPushToken(id, pushToken) {
+    if (typeof pushToken !== "string" || pushToken.length < 20 || pushToken.length > 4096) throw new Error("Invalid Android push token.");
+    const devices = this.read(); const device = devices.find((entry) => entry.id === id && !entry.revoked);
+    if (!device) throw new Error("Paired device not found.");
+    device.pushToken = pushToken; device.pushUpdatedAt = Date.now(); this.write(devices); return device;
+  }
+
+  removePushTokens(tokens) {
+    const rejected = new Set(tokens || []); if (!rejected.size) return;
+    const devices = this.read(); let changed = false;
+    for (const device of devices) if (rejected.has(device.pushToken)) { delete device.pushToken; delete device.pushUpdatedAt; changed = true; }
+    if (changed) this.write(devices);
+  }
+
+  revoke(id) { const devices = this.read(); const device = devices.find((entry) => entry.id === id); if (!device) throw new Error("Device not found."); device.revoked = true; delete device.pushToken; delete device.pushUpdatedAt; this.write(devices); }
 }
 
 module.exports = { DeviceStore };

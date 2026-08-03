@@ -26,3 +26,9 @@ test("a relay pairing challenge is short-lived, secret, and creates a per-device
   assert.equal(store.findRelayKey(device.id), null);
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test("a paired device can store and remove its Android push token", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "vertex-device-push-")); const store = new DeviceStore(root); const device = store.pair(store.createChallenge(), "Push phone"); const pushToken = "token-with-enough-characters-for-fcm";
+  assert.equal(store.setPushToken(device.id, pushToken).pushToken, pushToken); assert.throws(() => store.setPushToken("missing", pushToken), /not found/);
+  store.removePushTokens([pushToken]); assert.equal(store.read()[0].pushToken, undefined); fs.rmSync(root, { recursive:true, force:true });
+});

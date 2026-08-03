@@ -1,22 +1,63 @@
-# Android push and biometric setup
+# Android push notifications
 
-## Current behaviour
+Vertex push is now wired end to end, but deliberately disabled until the native Android wrapper and Firebase sender are configured. The Worker—not the browser, Vercel app, or laptop—holds Firebase sender credentials.
 
-Vertex is already complete for in-app activity: the laptop writes task completion, failure, and approval-like prompt events to `~/.vertex/activity.json`. The encrypted phone connection fetches those events when the app is open or reconnects. No terminal text is sent to the relay.
+## What is sent
 
-## Firebase Cloud Messaging
+For a task that needs attention, completes, or fails, Vertex sends only:
 
-This requires a Firebase project owned by the Vertex account owner. It cannot be enabled safely from JavaScript alone or by placing a server credential in Vercel.
+- a short title, such as `AI task needs your input`;
+- event type;
+- task ID and session name; and
+- a deep link back to Vertex.
 
-1. Create or select a Firebase project and register the Nativine-generated Android package.
-2. Download `google-services.json` from that Firebase Android app registration and add it only to the private native Android build configuration.
-3. Configure the native wrapper to request Android's notification permission on Android 13 or later and to receive FCM messages.
-4. Use a trusted server environment, such as a private Cloudflare Worker or Firebase Cloud Function, with Firebase Admin credentials to send a notification to the app registration token. Never embed those credentials in the web app, Git repository, or laptop-agent environment.
-5. Send only a task identifier and a short status in push payloads. The app must retrieve the actual activity over the existing encrypted Vertex relay after opening.
-6. Configure the native notification tap action to open `https://vertex-cyan-phi.vercel.app/?task=<task-id>` or the equivalent final production URL.
+Terminal output, prompts, source code, paths, and diffs are never in the push body. After tapping, the app reconnects through the existing encrypted relay and fetches the real activity from the laptop.
 
-Firebase requires a trusted sender and a registered Android client; its Android documentation covers the client receiver and the Android notification permission. [Firebase Cloud Messaging overview](https://firebase.google.com/docs/cloud-messaging) and [Android setup guide](https://firebase.google.com/docs/cloud-messaging/android/get-started).
+## One-time Firebase setup
 
-## Biometric unlock
+1. In the [Firebase console](https://console.firebase.google.com/), create a project and register the Android package produced by Nativine.
+2. Download `google-services.json` and put it in the private Nativine/native Android build configuration. Do not add it to this repository.
+3. Create a Firebase service account with Firebase Cloud Messaging permission. Keep its `project_id`, `client_email`, and `private_key` private.
+4. Update the Nativine wrapper to request Android notification permission and receive Firebase messages. When it receives a registration token, call this already-exposed web function:
 
-Enable a biometric/app-lock option only in the Nativine native wrapper after confirming that its Android bridge exposes Android BiometricPrompt or an equivalent protected native API. The web app must never claim biometric protection when it has only browser storage. Device revocation in Vertex remains the recovery mechanism for a lost phone.
+   ```js
+   window.vertexRegisterPushToken(firebaseRegistrationToken)
+   ```
+
+   Vertex stores that token only in the paired laptop's mode-0600 device file.
+
+## Configure the Cloudflare Worker
+
+From `~/vertex`, set these Worker secrets interactively—never put their values in Git, Vercel, or a command line:
+
+```bash
+npx wrangler secret put VERTEX_PUSH_KEY --config relay/wrangler.toml
+npx wrangler secret put FCM_PROJECT_ID --config relay/wrangler.toml
+npx wrangler secret put FCM_CLIENT_EMAIL --config relay/wrangler.toml
+npx wrangler secret put FCM_PRIVATE_KEY --config relay/wrangler.toml
+npx wrangler deploy --config relay/wrangler.toml
+```
+
+`VERTEX_PUSH_KEY` is a new random secret shared only with the laptop agent. `FCM_PRIVATE_KEY` is the service account private key, including its PEM markers and line breaks.
+
+## Configure the laptop agent
+
+Add these values to the environment used by `vertex-agent.service`:
+
+```ini
+VERTEX_PUSH_ENDPOINT=https://vertex-relay.arc-terminal.workers.dev/v1/push
+VERTEX_PUSH_KEY=the-same-random-secret
+VERTEX_APP_URL=https://vertex-cyan-phi.vercel.app
+```
+
+Then restart it:
+
+```bash
+systemctl --user restart vertex-agent.service
+```
+
+Open Vertex → Account → Setup & test. **Background push** becomes Ready only after the Worker sender is configured and this Android phone has registered its token.
+
+## Native tap behaviour
+
+The Android wrapper should open the `link` carried in the FCM data payload. Vertex supports `?task=<task-id>` and `?session=<session-name>` and opens the associated task/session after pairing.
