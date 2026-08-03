@@ -128,6 +128,12 @@ function updateSettings(values) {
   return { ...next, travel:travel.status() };
 }
 
+function restartInstalledAgent() {
+  if (!process.env.INVOCATION_ID) throw new Error("Install the Vertex background service before using in-app restart.");
+  setTimeout(() => process.exit(0), 350).unref();
+  return { restarting:true };
+}
+
 async function listWorkspaces({ refreshProjects = false } = {}) {
   if (refreshProjects) await projects.refresh();
   return workspaceIndex.list({ sessions:await manager.list(), tasks:tasks.sync(), projects:projects.list() });
@@ -222,6 +228,7 @@ const server = http.createServer(async (request, response) => {
   if (pathname === "/device-health" && request.method === "GET") return json(response, 200, health());
   if (pathname === "/settings" && request.method === "GET") return json(response, 200, settings.read());
   if (pathname === "/settings" && request.method === "POST") return json(response, 200, updateSettings(await readJson(request)));
+  if (pathname === "/agent/restart" && request.method === "POST") return json(response, 202, restartInstalledAgent());
   if (pathname === "/push-token" && request.method === "POST") {
     const device = authorizedDevice(request); if (!device) return json(response, 403, { error:"A paired device token is required." });
     try { const body = await readJson(request); devices.setPushToken(device.id, body.pushToken); return json(response, 200, { ok:true }); } catch (error) { return json(response, 400, { error:error.message }); }
@@ -345,6 +352,7 @@ function attachClient(client) {
       if (message.type === "getHealth") return send(client, { type:"health", requestId:message.requestId, ...health() });
       if (message.type === "getSettings") return send(client, { type:"settings", requestId:message.requestId, ...settings.read() });
       if (message.type === "updateSettings") return send(client, { type:"settings", requestId:message.requestId, ...updateSettings(message) });
+      if (message.type === "restartAgent") return send(client, { type:"agentRestarting", requestId:message.requestId, ...restartInstalledAgent() });
       if (message.type === "registerPushToken") { if (!client.vertexDeviceId) throw new Error("Push registration requires a paired device."); devices.setPushToken(client.vertexDeviceId, message.pushToken); return send(client, { type:"pushRegistered", requestId:message.requestId, ok:true }); }
       if (message.type === "listFiles") return send(client, { type:"files", requestId:message.requestId, ...(await files.list(message)) });
       if (message.type === "readFile") return send(client, { type:"file", requestId:message.requestId, ...(await files.preview(message)) });

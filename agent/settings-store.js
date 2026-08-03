@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const DEFAULTS = Object.freeze({ preventSleep:true, travelMode:false, agentLocked:false });
+const DEFAULTS = Object.freeze({ preventSleep:true, travelMode:true, agentLocked:false });
 
 class SettingsStore {
   constructor(root = path.join(process.env.HOME || ".", ".vertex")) { this.root = root; this.file = path.join(root, "settings.json"); }
