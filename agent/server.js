@@ -23,6 +23,8 @@ const { FileService } = require("./file-service");
 const { GitService } = require("./git-service");
 const { DockerService } = require("./docker-service");
 const { SettingsStore } = require("./settings-store");
+const { WorkspaceIndex } = require("./workspace-index");
+const { WorkspaceService } = require("./workspace-service");
 
 const PORT = Number(process.env.VERTEX_PORT || 8787);
 const HOST = process.env.VERTEX_HOST || "0.0.0.0";
@@ -37,6 +39,8 @@ const notifications = new NotificationService({ activities });
 const taskMonitor = new TaskMonitor({ tasks, manager, activities });
 const relayConfig = new RelayConfig().ensure();
 const projects = new ProjectIndex();
+const workspaceIndex = new WorkspaceIndex();
+const workspaces = new WorkspaceService({ index:workspaceIndex });
 const files = new FileService({ projects });
 const git = new GitService({ projects });
 const docker = new DockerService();
@@ -98,6 +102,11 @@ function writePairingUrl(url) {
 
 function health() {
   return { ok:true, hostname:os.hostname(), platform:process.platform, uptimeSeconds:Math.round(process.uptime()), projects:projects.list().length, notification:notifications.status(), preventSleep:settings.read().preventSleep, checkedAt:Date.now() };
+}
+
+async function listWorkspaces({ refreshProjects = false } = {}) {
+  if (refreshProjects) await projects.refresh();
+  return workspaceIndex.list({ sessions:await manager.list(), tasks:tasks.sync(), projects:projects.list() });
 }
 
 async function controlSession({ action, name, nextName, taskId }) {
@@ -198,6 +207,11 @@ const server = http.createServer(async (request, response) => {
   if (request.method === "POST" && sessionActionMatch) { const body = await readJson(request); return json(response, 200, { result:await controlSession({ ...body, name:decodeURIComponent(sessionActionMatch[1]) }) }); }
   if (pathname === "/projects" && request.method === "GET") return json(response, 200, { projects: projects.list() });
   if (pathname === "/projects/refresh" && request.method === "POST") return json(response, 200, { projects: await projects.refresh() });
+  if (pathname === "/workspaces" && request.method === "GET") return json(response, 200, { workspaces:await listWorkspaces() });
+  if (pathname === "/workspaces/refresh" && request.method === "POST") return json(response, 200, { workspaces:await listWorkspaces({ refreshProjects:true }) });
+  if (pathname === "/workspace-roots" && request.method === "GET") return json(response, 200, { roots:await workspaces.roots() });
+  if (pathname === "/workspace-roots" && request.method === "POST") { const body = await readJson(request); return json(response, 201, { roots:await workspaces.addRoot(body.root) }); }
+  if (pathname === "/workspaces" && request.method === "POST") { const body = await readJson(request); return json(response, 201, { workspace:await workspaces.create({ root:body.root, name:body.name, initialiseGit:Boolean(body.initialiseGit) }) }); }
   const diffMatch = pathname.match(/^\/tasks\/([a-f0-9-]+)\/diff$/);
   if (request.method === "GET" && diffMatch) {
     try { return json(response, 200, await diffForTask(diffMatch[1])); } catch (error) { return json(response, 400, { error: error.message }); }
@@ -279,6 +293,11 @@ function attachClient(client) {
       if (message.type === "sessionAction") return send(client, { type:"sessionAction", requestId:message.requestId, result:await controlSession(message) });
       if (message.type === "listProjects") return send(client, { type: "projects", requestId: message.requestId, projects: projects.list() });
       if (message.type === "refreshProjects") return send(client, { type: "projects", requestId: message.requestId, projects: await projects.refresh() });
+      if (message.type === "listWorkspaces") return send(client, { type:"workspaces", requestId:message.requestId, workspaces:await listWorkspaces() });
+      if (message.type === "refreshWorkspaces") return send(client, { type:"workspaces", requestId:message.requestId, workspaces:await listWorkspaces({ refreshProjects:true }) });
+      if (message.type === "listWorkspaceRoots") return send(client, { type:"workspaceRoots", requestId:message.requestId, roots:await workspaces.roots() });
+      if (message.type === "addWorkspaceRoot") return send(client, { type:"workspaceRoots", requestId:message.requestId, roots:await workspaces.addRoot(message.root) });
+      if (message.type === "createWorkspace") return send(client, { type:"workspaceCreated", requestId:message.requestId, workspace:await workspaces.create({ root:message.root, name:message.name, initialiseGit:Boolean(message.initialiseGit) }) });
       if (message.type === "taskDiff") return send(client, { type: "diff", requestId: message.requestId, ...(await diffForTask(message.id)) });
       if (message.type === "reviewTask") return send(client, { type: "reviewed", requestId: message.requestId, task: tasks.review(message.id, message.decision) });
       if (message.type === "create") return send(client, { type: "created", requestId: message.requestId, session: await manager.create(message) });

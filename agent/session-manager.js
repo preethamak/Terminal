@@ -31,7 +31,7 @@ class SessionManager {
         "-F",
         "#{session_name}\t#{session_created}\t#{session_attached}",
       ]);
-      return stdout
+      const sessions = stdout
         .trim()
         .split("\n")
         .filter(Boolean)
@@ -39,6 +39,13 @@ class SessionManager {
           const [name, createdAt, attached] = line.split("\t");
           return { name, createdAt: Number(createdAt), attached: Number(attached) > 0 };
         });
+      return Promise.all(sessions.map(async (session) => {
+        try {
+          const { stdout: metadata } = await execFileAsync("tmux", ["display-message", "-p", "-t", session.name, "#{pane_current_path}\t#{pane_current_command}"]);
+          const [cwd, program] = metadata.trim().split("\t");
+          return { ...session, cwd:cwd || null, program:program || null };
+        } catch { return { ...session, cwd:null, program:null }; }
+      }));
     } catch (error) {
       if (error.code === 1) return [];
       throw error;

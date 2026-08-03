@@ -4,13 +4,13 @@ version: 1.0
 date_created: 2026-08-03
 last_updated: 2026-08-03
 owner: Vertex
-status: Planned
+status: In progress
 tags: [feature, workspace, sessions, terminal, mobile, notifications]
 ---
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-planned-blue)
+![Status: In progress](https://img.shields.io/badge/status-in%20progress-yellow)
 
 Transform Vertex from a Git-project launcher into a mobile continuation of the laptop: show existing persistent terminals first, support ordinary folders as workspaces, create a new folder and optional Git repository from the phone, and repair terminal scrolling before adding background notification delivery.
 
@@ -39,11 +39,11 @@ Transform Vertex from a Git-project launcher into a mobile continuation of the l
 
 | Task | Description | Completed | Date |
 |---|---|---:|---|
-| TASK-001 | Extend `agent/session-manager.js` `list()` to return `cwd` from the active tmux pane and `program` from `#{pane_current_command}` for each validated session name. Do not capture terminal text. |  |  |
-| TASK-002 | Add `agent/workspace-index.js` with mode-0600 persistence. Merge configured roots, current tmux session directories, task `cwd` values, and existing Git projects into deduplicated workspace records `{ path, name, kind, source, lastOpenedAt }`. |  |  |
-| TASK-003 | Add `agent/workspace-service.js` functions `listRoots`, `addRoot`, `createWorkspace`, and `initialiseGit`. Require canonical resolved paths beneath configured roots and reject invalid folder names. |  |  |
-| TASK-004 | Add direct HTTP and encrypted relay handlers in `agent/server.js` for workspace roots, workspace refresh, workspace creation, and Git initialisation. Reuse the existing request/response envelope pattern. |  |  |
-| TASK-005 | Add Node tests covering tmux metadata parsing, non-Git workspace discovery, root-bound creation, duplicate workspaces, traversal rejection, and Git initialisation argument allowlisting. |  |  |
+| TASK-001 | Extend `agent/session-manager.js` `list()` to return `cwd` from the active tmux pane and `program` from `#{pane_current_command}` for each validated session name. Do not capture terminal text. | ✅ | 2026-08-03 |
+| TASK-002 | Add `agent/workspace-index.js` with mode-0600 persistence. Merge configured roots, current tmux session directories, task `cwd` values, and existing Git projects into deduplicated workspace records `{ path, name, kind, source, lastOpenedAt }`. | ✅ | 2026-08-03 |
+| TASK-003 | Add `agent/workspace-service.js` functions `listRoots`, `addRoot`, `createWorkspace`, and `initialiseGit`. Require canonical resolved paths beneath configured roots and reject invalid folder names. | ✅ | 2026-08-03 |
+| TASK-004 | Add direct HTTP and encrypted relay handlers in `agent/server.js` for workspace roots, workspace refresh, workspace creation, and Git initialisation. Reuse the existing request/response envelope pattern. | ✅ | 2026-08-03 |
+| TASK-005 | Add Node tests covering tmux metadata parsing, non-Git workspace discovery, root-bound creation, duplicate workspaces, traversal rejection, and Git initialisation argument allowlisting. | ✅ | 2026-08-03 |
 
 ### Implementation Phase 2
 
@@ -51,11 +51,11 @@ Transform Vertex from a Git-project launcher into a mobile continuation of the l
 
 | Task | Description | Completed | Date |
 |---|---|---:|---|
-| TASK-006 | Extend `web/src/main.jsx` `useVertex` request map and refresh payload for workspace roots and workspace records while preserving the current Git-project request for compatibility. |  |  |
-| TASK-007 | Replace the home “Workspaces” rail with a “Continue from laptop” surface: existing tmux sessions first, then recent workspaces, then a clear “New workspace” action. Display `cwd` and active program in a compact mobile-safe form. |  |  |
+| TASK-006 | Extend `web/src/main.jsx` `useVertex` request map and refresh payload for workspace roots and workspace records while preserving the current Git-project request for compatibility. | ✅ | 2026-08-03 |
+| TASK-007 | Replace the home “Workspaces” rail with a “Continue from laptop” surface: existing tmux sessions first, then recent workspaces, then a clear “New workspace” action. Display `cwd` and active program in a compact mobile-safe form. | ✅ | 2026-08-03 |
 | TASK-008 | Add a Workspace screen that lists both folder and Git workspace records, supports search, lets the user open a terminal in a selected folder, and keeps read-only Git/file panels available when the workspace is Git-backed. |  |  |
-| TASK-009 | Add a New workspace sheet: choose approved parent root, enter a single folder name, choose plain folder or “Initialise Git,” create it through `workspace-service`, then attach immediately to the created persistent terminal. |  |  |
-| TASK-010 | Add responsive styles in `web/src/accessibility.css` for live-session badges, workspace kinds, truncated paths, root selection, empty states, and a high-contrast new-workspace flow. |  |  |
+| TASK-009 | Add a New workspace sheet: choose approved parent root, enter a single folder name, choose plain folder or “Initialise Git,” create it through `workspace-service`, then attach immediately to the created persistent terminal. | ✅ | 2026-08-03 |
+| TASK-010 | Add responsive styles in `web/src/accessibility.css` for live-session badges, workspace kinds, truncated paths, root selection, empty states, and a high-contrast new-workspace flow. | ✅ | 2026-08-03 |
 
 ### Implementation Phase 3
 

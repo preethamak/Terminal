@@ -8,6 +8,7 @@ Vertex proves one thing first: an Android phone can attach to a persistent `tmux
 - Persistent named sessions backed by `tmux`.
 - Switch directly between persistent terminals from the live terminal view; the work continues untouched on the laptop.
 - First-class real terminal launcher: choose a project, open a persistent shell, then run any command or developer CLI yourself from the phone.
+- Continuation-first home: existing tmux terminals and regular laptop folders appear alongside Git projects; create a new folder and optional Git repository from the phone, then open its persistent terminal.
 - Mobile-first PWA served by the laptop agent, with an **AI tasks first** home screen, xterm.js terminal, mobile Ctrl/Esc/Tab/pipe/slash/arrow key row, and terminal pinch/text-size zoom.
 - Codex and Claude Code task launchers: pick a project, enter a task, and Vertex starts the CLI in a persistent tmux session.
 - Task lifecycle tracking: task cards move from running to completed/failed while the terminal remains available for inspection or follow-up.
