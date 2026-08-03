@@ -7,7 +7,7 @@ function base64url(value) {
 }
 
 function privateKeyBytes(pem) {
-  const raw = pem.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, ""); const binary = atob(raw);
+  const raw = pem.replace(/\\n/g, "\n").replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, ""); const binary = atob(raw);
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 

@@ -38,7 +38,7 @@ npx wrangler secret put FCM_PRIVATE_KEY --config relay/wrangler.toml
 npx wrangler deploy --config relay/wrangler.toml
 ```
 
-`VERTEX_PUSH_KEY` is a new random secret shared only with the laptop agent. `FCM_PRIVATE_KEY` is the service account private key, including its PEM markers and line breaks.
+`VERTEX_PUSH_KEY` is a new random secret shared only with the laptop agent. `FCM_PRIVATE_KEY` is the service account private key, including its PEM markers and line breaks. Vertex accepts either real line breaks or the `\n` representation from the downloaded Firebase JSON.
 
 ## Configure the laptop agent
 
