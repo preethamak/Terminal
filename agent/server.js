@@ -131,9 +131,10 @@ async function controlSession({ action, name, nextName, taskId }) {
   throw new Error("Unsupported session action.");
 }
 
-function createTestActivity() {
+async function createTestActivity() {
   const activity = activities.add({ type:"test", title:"Vertex test received", detail:"Your phone reached the laptop through Vertex's encrypted connection.", fingerprint:`test:${Date.now()}` });
-  return { activity };
+  let delivery; try { delivery = await notifications.send(activity); } catch (error) { delivery = { sent:false, error:error.message }; }
+  return { activity, delivery };
 }
 
 function sendWebFile(request, response) {
@@ -198,7 +199,7 @@ const server = http.createServer(async (request, response) => {
   if (pathname === "/tasks") return json(response, 200, { tasks: tasks.sync() });
   if (pathname === "/activity" && request.method === "GET") return json(response, 200, { activities:activities.list() });
   if (pathname === "/activity/read" && request.method === "POST") { const body = await readJson(request); return json(response, 200, { activities:activities.markRead(body.id || null) }); }
-  if (pathname === "/activity/test" && request.method === "POST") return json(response, 201, createTestActivity());
+  if (pathname === "/activity/test" && request.method === "POST") return json(response, 201, await createTestActivity());
   if (pathname === "/device-health" && request.method === "GET") return json(response, 200, health());
   if (pathname === "/settings" && request.method === "GET") return json(response, 200, settings.read());
   if (pathname === "/settings" && request.method === "POST") return json(response, 200, settings.update(await readJson(request)));
@@ -303,7 +304,7 @@ function attachClient(client) {
       if (message.type === "listTasks") return send(client, { type: "tasks", requestId: message.requestId, tasks: tasks.sync() });
       if (message.type === "listActivity") return send(client, { type:"activity", requestId:message.requestId, activities:activities.list() });
       if (message.type === "readActivity") return send(client, { type:"activity", requestId:message.requestId, activities:activities.markRead(message.id || null) });
-      if (message.type === "testActivity") return send(client, { type:"testActivity", requestId:message.requestId, ...createTestActivity() });
+      if (message.type === "testActivity") return send(client, { type:"testActivity", requestId:message.requestId, ...(await createTestActivity()) });
       if (message.type === "getHealth") return send(client, { type:"health", requestId:message.requestId, ...health() });
       if (message.type === "getSettings") return send(client, { type:"settings", requestId:message.requestId, ...settings.read() });
       if (message.type === "updateSettings") return send(client, { type:"settings", requestId:message.requestId, ...settings.update(message) });
