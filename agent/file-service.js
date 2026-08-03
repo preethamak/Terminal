@@ -6,16 +6,18 @@ const MAX_PREVIEW_BYTES = 256 * 1024;
 const HIDDEN = new Set([".git", "node_modules", "dist", "build", "target"]);
 
 class FileService {
-  constructor({ projects }) { this.projects = projects; }
+  constructor({ projects, workspaces = async () => [] }) { this.projects = projects; this.workspaces = workspaces; }
 
-  project(projectPath) {
+  async project(projectPath) {
     const project = this.projects.list().find((entry) => entry.path === projectPath);
-    if (!project) throw new Error("That project is not available to Vertex.");
-    return project.path;
+    if (project) return project.path;
+    const workspace = (await this.workspaces()).find((entry) => entry.path === projectPath);
+    if (!workspace) throw new Error("That workspace is not available to Vertex.");
+    return workspace.path;
   }
 
   async resolve(projectPath, relativePath = "") {
-    const root = this.project(projectPath); const rootReal = await fs.realpath(root);
+    const root = await this.project(projectPath); const rootReal = await fs.realpath(root);
     const requested = path.resolve(rootReal, relativePath || ".");
     const resolved = await fs.realpath(requested);
     if (resolved !== rootReal && !resolved.startsWith(`${rootReal}${path.sep}`)) throw new Error("That location is outside this project.");

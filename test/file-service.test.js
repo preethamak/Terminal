@@ -13,3 +13,14 @@ test("file service lists and previews only files in an approved project", async 
   await assert.rejects(service.list({ projectPath:app, relativePath:"../" }), /outside this project/);
   fs.rmSync(root, { recursive:true, force:true });
 });
+
+test("file service permits a normal approved workspace without requiring Git", async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "vertex-files-workspace-")); const folder = path.join(home, "scratch");
+  fs.mkdirSync(folder); fs.writeFileSync(path.join(folder, "notes.txt"), "plain workspace");
+  const service = new FileService({ projects:{ list:() => [] }, workspaces:async () => [{ path:folder, kind:"folder" }] });
+  const listing = await service.list({ projectPath:folder });
+  assert.equal(listing.files[0].name, "notes.txt");
+  const preview = await service.preview({ projectPath:folder, relativePath:"notes.txt" });
+  assert.equal(preview.content, "plain workspace");
+  fs.rmSync(home, { recursive:true, force:true });
+});

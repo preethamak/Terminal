@@ -41,7 +41,7 @@ const relayConfig = new RelayConfig().ensure();
 const projects = new ProjectIndex();
 const workspaceIndex = new WorkspaceIndex();
 const workspaces = new WorkspaceService({ index:workspaceIndex });
-const files = new FileService({ projects });
+const files = new FileService({ projects, workspaces:() => listWorkspaces() });
 const git = new GitService({ projects });
 const docker = new DockerService();
 const settings = new SettingsStore();

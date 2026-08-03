@@ -53,7 +53,7 @@ Transform Vertex from a Git-project launcher into a mobile continuation of the l
 |---|---|---:|---|
 | TASK-006 | Extend `web/src/main.jsx` `useVertex` request map and refresh payload for workspace roots and workspace records while preserving the current Git-project request for compatibility. | ✅ | 2026-08-03 |
 | TASK-007 | Replace the home “Workspaces” rail with a “Continue from laptop” surface: existing tmux sessions first, then recent workspaces, then a clear “New workspace” action. Display `cwd` and active program in a compact mobile-safe form. | ✅ | 2026-08-03 |
-| TASK-008 | Add a Workspace screen that lists both folder and Git workspace records, supports search, lets the user open a terminal in a selected folder, and keeps read-only Git/file panels available when the workspace is Git-backed. |  |  |
+| TASK-008 | Add a Workspace screen that lists both folder and Git workspace records, supports search, lets the user open a terminal in a selected folder, and keeps read-only Git/file panels available when the workspace is Git-backed. | ✅ | 2026-08-03 |
 | TASK-009 | Add a New workspace sheet: choose approved parent root, enter a single folder name, choose plain folder or “Initialise Git,” create it through `workspace-service`, then attach immediately to the created persistent terminal. | ✅ | 2026-08-03 |
 | TASK-010 | Add responsive styles in `web/src/accessibility.css` for live-session badges, workspace kinds, truncated paths, root selection, empty states, and a high-contrast new-workspace flow. | ✅ | 2026-08-03 |
 
@@ -63,8 +63,8 @@ Transform Vertex from a Git-project launcher into a mobile continuation of the l
 
 | Task | Description | Completed | Date |
 |---|---|---:|---|
-| TASK-011 | Refactor `web/src/main.jsx` `TerminalView` touch handling so one touch scrolls xterm scrollback, two touches only change text size, and neither path drops terminal input or forces jump-to-live. |  |  |
-| TASK-012 | Add terminal UI controls for “jump to live,” selected-session state, connection/reconnect state, and a concise scrolling hint that disappears after first successful scroll. |  |  |
+| TASK-011 | Refactor `web/src/main.jsx` `TerminalView` touch handling so one touch scrolls xterm scrollback, two touches only change text size, and neither path drops terminal input or forces jump-to-live. | ✅ | 2026-08-03 |
+| TASK-012 | Add terminal UI controls for “jump to live,” selected-session state, connection/reconnect state, and a concise scrolling hint that disappears after first successful scroll. | ✅ | 2026-08-03 |
 | TASK-013 | Add pure tests for touch gesture classification and output sequencing, then perform a manual Android acceptance script using long Codex output, `less`, `vim`, and a network reconnection. |  |  |
 | TASK-014 | Record latency, reconnect result, and scrolling outcome locally in `agent/activity-store.js` as bounded diagnostic events; never send this telemetry to the relay or an analytics service. |  |  |
 
@@ -75,7 +75,7 @@ Transform Vertex from a Git-project launcher into a mobile continuation of the l
 | Task | Description | Completed | Date |
 |---|---|---:|---|
 | TASK-015 | Extend `agent/task-monitor.js` to create bounded activity for managed Codex/Claude task completion, failure, and approval hints, including a deep-linkable session identifier. |  |  |
-| TASK-016 | Add `web/src/main.jsx` deep-link parsing for `?session=<name>` and `?task=<id>` so a notification tap or shared link opens the relevant persistent terminal after pairing. |  |  |
+| TASK-016 | Add `web/src/main.jsx` deep-link parsing for `?session=<name>` and `?task=<id>` so a notification tap or shared link opens the relevant persistent terminal after pairing. | ✅ | 2026-08-03 |
 | TASK-017 | Extend the existing Setup & test screen with explicit states for in-app activity, native push token registration, Firebase sender configuration, and Android wrapper capability. Keep unavailable native states disabled with actionable setup text. |  |  |
 | TASK-018 | Define the `agent/notification-service.js` provider interface and Firebase payload contract, but do not enable network push until DEP-003 credentials and the native app registration token exist. |  |  |
 
