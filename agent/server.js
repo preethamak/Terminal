@@ -34,6 +34,7 @@ const { assertPairedAccess, pairingAllowed } = require("./access-control");
 
 const PORT = Number(process.env.VERTEX_PORT || 8787);
 const HOST = process.env.VERTEX_HOST || "0.0.0.0";
+const TMUX_ATTACH_SETTLE_MS = 75;
 const TOKEN_FILE = process.env.VERTEX_TOKEN_FILE || path.join(process.env.HOME || ".", ".vertex", "token");
 const PAIRING_FILE = path.join(process.env.HOME || ".", ".vertex", "pairing.json");
 const manager = new SessionManager();
@@ -383,14 +384,19 @@ function attachClient(client) {
       if (message.type === "attach") {
         terminal?.kill();
         attachedName = message.name;
-        const snapshot = await manager.snapshot(message.name);
         const sequencer = outputSequencer((event) => send(client, event));
-        send(client, { type: "terminalSnapshot", sequence: sequencer.current(), data: snapshot });
+        // tmux redraws the visible pane as it attaches. Do not forward that
+        // redundant redraw: it would clear xterm history restored below.
+        let restoring = true;
         terminal = manager.attach(message.name, {
-          onData: (data) => sequencer.next(data),
+          onData: (data) => { if (!restoring) sequencer.next(data); },
           onExit: ({ exitCode }) => send(client, { type: "closed", exitCode }),
         });
         if (terminalSize) terminal.resize(terminalSize.cols, terminalSize.rows);
+        await new Promise((resolve) => setTimeout(resolve, TMUX_ATTACH_SETTLE_MS));
+        const snapshot = await manager.snapshot(message.name);
+        send(client, { type: "terminalSnapshot", sequence: sequencer.current(), data: snapshot });
+        restoring = false;
         return send(client, { type: "attached", name: message.name });
       }
       if (message.type === "input" && terminal) { const task = tasks.findBySession(attachedName); if (task?.attention) tasks.update(task.id, { attention:null, status:"running" }); return terminal.write(String(message.data || "")); }
