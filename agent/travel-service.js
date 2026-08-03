@@ -23,7 +23,7 @@ class TravelService {
     if (this.status().active) return this.status();
     this.lastError = null;
     try {
-      const child = this.spawnProcess(this.command, ["--what=sleep", "--mode=block", "--why=Vertex Travel Mode", "sleep", "infinity"], { stdio:"ignore" });
+      const child = this.spawnProcess(this.command, ["--what=sleep", "--mode=block", "--why=Vertex is keeping your laptop available", "sleep", "infinity"], { stdio:"ignore" });
       this.child = child;
       this.startedAt = Date.now();
       child.once?.("error", (error) => { this.lastError = error.message; this.child = null; this.lastStoppedAt = Date.now(); });

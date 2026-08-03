@@ -346,7 +346,7 @@ function TerminalView({ vertex, session, onClose, onSwitch }) {
         const nextY = event.touches[0]?.clientY; if (touchY.current === null || nextY === undefined) return;
         const difference = nextY - touchY.current;
         if (Math.abs(difference) < 7) return;
-        term.scrollLines(Math.round(-difference / 8)); touchY.current = nextY; updateFollowState(); if (hintVisible.current) { hintVisible.current = false; setShowTouchHint(false); try { localStorage.setItem("vertex.dismissedTerminalGestureHint", "1"); } catch {} } event.preventDefault();
+        term.scrollLines(Math.round(difference / 8)); touchY.current = nextY; updateFollowState(); if (hintVisible.current) { hintVisible.current = false; setShowTouchHint(false); try { localStorage.setItem("vertex.dismissedTerminalGestureHint", "1"); } catch {} } event.preventDefault();
       };
       const onTouchEnd = () => { touchY.current = null; pinchDistance.current = null; };
       vertex.terminalListener.current = receive; const dataListener = term.onData(sendInput); const scrollListener = term.onScroll(updateFollowState);

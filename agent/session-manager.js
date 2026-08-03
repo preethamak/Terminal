@@ -4,8 +4,21 @@ const pty = require("node-pty");
 
 const execFileAsync = promisify(execFile);
 const SESSION_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/;
+const SESSION_SEPARATOR = "|";
 const shellQuote = (value) => `'${String(value).replaceAll("'", "'\\''")}'`;
 const inhibitedCommand = (command, name, shell) => `systemd-inhibit --what=sleep --mode=block --why=${shellQuote(`Vertex task: ${name}`)} ${shellQuote(shell)} -lc ${shellQuote(command)}`;
+
+function parseSessionList(stdout) {
+  return stdout.trim().split("\n").filter(Boolean).map((line) => {
+    const [name, createdAt, attached] = line.split(SESSION_SEPARATOR);
+    return { name, createdAt:Number(createdAt), attached:Number(attached) > 0 };
+  });
+}
+
+function parseSessionMetadata(stdout) {
+  const value = stdout.trim(); const separator = value.indexOf(SESSION_SEPARATOR);
+  return separator < 0 ? { cwd:null, program:null } : { cwd:value.slice(0, separator) || null, program:value.slice(separator + 1) || null };
+}
 
 class SessionManager {
   constructor({ shell = process.env.SHELL || "/bin/bash" } = {}) {
@@ -29,21 +42,13 @@ class SessionManager {
       const { stdout } = await execFileAsync("tmux", [
         "list-sessions",
         "-F",
-        "#{session_name}\t#{session_created}\t#{session_attached}",
+        `#{session_name}${SESSION_SEPARATOR}#{session_created}${SESSION_SEPARATOR}#{session_attached}`,
       ]);
-      const sessions = stdout
-        .trim()
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => {
-          const [name, createdAt, attached] = line.split("\t");
-          return { name, createdAt: Number(createdAt), attached: Number(attached) > 0 };
-        });
+      const sessions = parseSessionList(stdout);
       return Promise.all(sessions.map(async (session) => {
         try {
-          const { stdout: metadata } = await execFileAsync("tmux", ["display-message", "-p", "-t", session.name, "#{pane_current_path}\t#{pane_current_command}"]);
-          const [cwd, program] = metadata.trim().split("\t");
-          return { ...session, cwd:cwd || null, program:program || null };
+          const { stdout: metadata } = await execFileAsync("tmux", ["display-message", "-p", "-t", session.name, `#{pane_current_path}${SESSION_SEPARATOR}#{pane_current_command}`]);
+          return { ...session, ...parseSessionMetadata(metadata) };
         } catch { return { ...session, cwd:null, program:null }; }
       }));
     } catch (error) {
@@ -117,4 +122,4 @@ class SessionManager {
   }
 }
 
-module.exports = { SessionManager, SESSION_NAME, shellQuote, inhibitedCommand };
+module.exports = { SessionManager, SESSION_NAME, SESSION_SEPARATOR, parseSessionList, parseSessionMetadata, shellQuote, inhibitedCommand };
