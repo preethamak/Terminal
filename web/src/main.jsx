@@ -35,6 +35,7 @@ const shortPath = (value) => value ? value.replace(/^\/home\/[^/]+/, "~") : "Loc
 function useVertex() {
   const [token, setToken] = useState(() => localStorage.getItem("vertex.token"));
   const [relay, setRelay] = useState(() => stored("vertex.relay"));
+  const [relayOnline, setRelayOnline] = useState(false);
   const [storage, setStorage] = useState(() => ({ available:storageAvailable(), persisted:null, lastWriteVerified:Boolean(stored("vertex.relay")) }));
   const [status, setStatus] = useState("Connecting to your laptop…");
   const [data, setData] = useState({ tasks:[], sessions:[], projects:[], workspaces:[], workspaceRoots:[], activities:[], health:null, settings:{ preventSleep:true }, docker:{ available:false, containers:[] } });
@@ -85,13 +86,13 @@ function useVertex() {
   useEffect(() => {
     if (!relay) return;
     const client = new VertexRelayClient(relay); relayClient.current = client;
-    client.onstatus = (next) => setStatus(next === "online" ? "Laptop online" : "Reconnecting securely…");
+    client.onstatus = (next) => { setRelayOnline(next === "online"); setStatus(next === "online" ? "Laptop online" : "Reconnecting securely…"); };
     client.onmessage = (event) => {
       const match = event.requestId && pending.current.get(event.requestId);
       if (match) { clearTimeout(match.timeout); pending.current.delete(event.requestId); match.resolve(event); }
       terminalListener.current(event);
     };
-    client.connect(); return () => client.close();
+    client.connect(); return () => { setRelayOnline(false); client.close(); };
   }, [relay]);
   useEffect(() => { if (token || relay) refresh(); }, [token, relay, refresh]);
   useEffect(() => { const timer = setInterval(() => { if (token || relay) refresh(); }, 12000); return () => clearInterval(timer); }, [token, relay, refresh]);
@@ -103,7 +104,7 @@ function useVertex() {
   const forget = useCallback(() => { localStorage.removeItem("vertex.token"); localStorage.removeItem("vertex.relay"); setToken(null); setRelay(null); setStorage((current) => ({ ...current, lastWriteVerified:false })); setData({ tasks:[], sessions:[], projects:[], workspaces:[], workspaceRoots:[], activities:[], health:null, settings:{ preventSleep:true }, docker:{ available:false, containers:[] } }); }, []);
   const saveToken = useCallback((value) => { try { localStorage.setItem("vertex.token", value); const verified = localStorage.getItem("vertex.token") === value; setStorage((current) => ({ ...current, available:storageAvailable(), lastWriteVerified:verified })); setToken(value); return verified; } catch { setStorage((current) => ({ ...current, available:false, lastWriteVerified:false })); setToken(value); return false; } }, []);
   const saveRelay = useCallback((value) => { const verified = saveStored("vertex.relay", value); setStorage((current) => ({ ...current, available:storageAvailable(), lastWriteVerified:verified })); setRelay(value); if (verified && navigator.storage?.persist) navigator.storage.persist().then((persisted) => setStorage((current) => ({ ...current, persisted }))).catch(() => {}); return verified; }, []);
-  return useMemo(() => ({ token, relay, storage, status, data, setStatus, direct, request, refresh, discoverProjects, send, terminalListener, setToken:saveToken, setRelay:saveRelay, forget }), [token, relay, storage, status, data, direct, request, refresh, discoverProjects, send, saveToken, saveRelay, forget]);
+  return useMemo(() => ({ token, relay, relayOnline, storage, status, data, setStatus, direct, request, refresh, discoverProjects, send, terminalListener, setToken:saveToken, setRelay:saveRelay, forget }), [token, relay, relayOnline, storage, status, data, direct, request, refresh, discoverProjects, send, saveToken, saveRelay, forget]);
 }
 
 function App() {
@@ -287,7 +288,7 @@ function controlInput(data) { return data.length === 1 && /^[a-z]$/i.test(data) 
 
 function TerminalView({ vertex, session, onClose, onSwitch }) {
   const element = useRef(null); const socket = useRef(null); const terminal = useRef(null); const fit = useRef(null); const finder = useRef(null); const output = useRef({ expected:1, pending:new Map(), scheduled:false }); const touchY = useRef(null); const pinchDistance = useRef(null); const ctrlArmed = useRef(false); const hintVisible = useRef(localStorage.getItem("vertex.dismissedTerminalGestureHint") !== "1");
-  const [status, setStatus] = useState("Connecting…"); const [following, setFollowing] = useState(true); const [searchOpen, setSearchOpen] = useState(false); const [query, setQuery] = useState(""); const [ctrlActive, setCtrlActive] = useState(false); const [fontSize, setFontSize] = useState(14); const [switcherOpen, setSwitcherOpen] = useState(false); const [showTouchHint, setShowTouchHint] = useState(hintVisible.current);
+  const [status, setStatus] = useState("Connecting…"); const [following, setFollowing] = useState(true); const [searchOpen, setSearchOpen] = useState(false); const [query, setQuery] = useState(""); const [ctrlActive, setCtrlActive] = useState(false); const [fontSize, setFontSize] = useState(14); const [switcherOpen, setSwitcherOpen] = useState(false); const [showTouchHint, setShowTouchHint] = useState(hintVisible.current); const [terminalVersion, setTerminalVersion] = useState(0);
   const sendInput = useCallback((data) => { const payload = ctrlArmed.current ? controlInput(data) : data; if (ctrlArmed.current) { ctrlArmed.current = false; setCtrlActive(false); } vertex.send({ type:"input", data:payload }, socket.current); }, [vertex.send]);
   const adjustFont = useCallback((delta) => { const current = terminal.current; if (!current) return; const next = Math.max(11, Math.min(20, (current.options.fontSize || 14) + delta)); if (next === current.options.fontSize) return; current.options.fontSize = next; setFontSize(next); requestAnimationFrame(() => fit.current?.fit()); }, []);
   useEffect(() => {
@@ -296,7 +297,7 @@ function TerminalView({ vertex, session, onClose, onSwitch }) {
       const [{ Terminal }, { FitAddon }, { SearchAddon }] = await Promise.all([import("@xterm/xterm"), import("@xterm/addon-fit"), import("@xterm/addon-search"), import("@xterm/xterm/css/xterm.css")]);
       if (disposed) return;
       const term = new Terminal({ cursorBlink:true, fontSize:14, fontFamily:"'JetBrains Mono', ui-monospace, monospace", theme:{ background:"#090b11", foreground:"#eaf0ff", cursor:"#a7b6ff", selectionBackground:"#364267" }, scrollback:10000, scrollSensitivity:3 });
-      const addon = new FitAddon(); const searchAddon = new SearchAddon(); term.loadAddon(addon); term.loadAddon(searchAddon); term.open(element.current); terminal.current = term; fit.current = addon; finder.current = searchAddon;
+      const addon = new FitAddon(); const searchAddon = new SearchAddon(); term.loadAddon(addon); term.loadAddon(searchAddon); term.open(element.current); terminal.current = term; fit.current = addon; finder.current = searchAddon; setTerminalVersion((version) => version + 1);
       const send = (message) => vertex.send(message, socket.current);
       const resize = () => { addon.fit(); send({ type:"resize", cols:term.cols, rows:term.rows }); };
       const updateFollowState = () => setFollowing(term.buffer.active.viewportY >= term.buffer.active.baseY);
@@ -318,12 +319,16 @@ function TerminalView({ vertex, session, onClose, onSwitch }) {
       vertex.terminalListener.current = receive; const dataListener = term.onData(sendInput); const scrollListener = term.onScroll(updateFollowState);
       element.current.addEventListener("touchstart", onTouchStart, { capture:true, passive:true }); element.current.addEventListener("touchmove", onTouchMove, { capture:true, passive:false }); element.current.addEventListener("touchend", onTouchEnd, { capture:true, passive:true }); element.current.addEventListener("touchcancel", onTouchEnd, { capture:true, passive:true });
       const observer = new ResizeObserver(() => setTimeout(resize, 80)); observer.observe(element.current);
-      if (vertex.relay) { send({ type:"attach", name:session.name }); setStatus("Live"); } else { const connectDirect = () => { if (disposed) return; const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/?token=${encodeURIComponent(vertex.token)}`); socket.current = ws; ws.onopen = () => ws.send(JSON.stringify({ type:"attach", name:session.name })); ws.onmessage = ({ data }) => receive(JSON.parse(data)); ws.onclose = () => { if (!disposed) { setStatus("Reconnecting…"); setTimeout(connectDirect, 1000); } }; }; connectDirect(); }
+      if (!vertex.relay) { const connectDirect = () => { if (disposed) return; const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/?token=${encodeURIComponent(vertex.token)}`); socket.current = ws; ws.onopen = () => ws.send(JSON.stringify({ type:"attach", name:session.name })); ws.onmessage = ({ data }) => receive(JSON.parse(data)); ws.onclose = () => { if (!disposed) { setStatus("Reconnecting…"); setTimeout(connectDirect, 1000); } }; }; connectDirect(); }
       requestAnimationFrame(resize);
-      cleanup = () => { vertex.terminalListener.current = () => {}; observer.disconnect(); dataListener.dispose(); scrollListener.dispose(); element.current?.removeEventListener("touchstart", onTouchStart, true); element.current?.removeEventListener("touchmove", onTouchMove, true); element.current?.removeEventListener("touchend", onTouchEnd, true); element.current?.removeEventListener("touchcancel", onTouchEnd, true); socket.current?.close(); term.dispose(); fit.current = null; finder.current = null; };
+      cleanup = () => { vertex.terminalListener.current = () => {}; observer.disconnect(); dataListener.dispose(); scrollListener.dispose(); element.current?.removeEventListener("touchstart", onTouchStart, true); element.current?.removeEventListener("touchmove", onTouchMove, true); element.current?.removeEventListener("touchend", onTouchEnd, true); element.current?.removeEventListener("touchcancel", onTouchEnd, true); socket.current?.close(); term.dispose(); if (terminal.current === term) terminal.current = null; fit.current = null; finder.current = null; };
     })().catch((error) => setStatus(error.message));
     return () => { disposed = true; cleanup(); };
   }, [adjustFont, sendInput, session.name, vertex.relay, vertex.token, vertex.send, vertex.terminalListener]);
+  useEffect(() => {
+    if (!vertex.relay || !vertex.relayOnline || !terminal.current || !terminalVersion) return;
+    setStatus("Resuming terminal…"); vertex.send({ type:"attach", name:session.name });
+  }, [session.name, terminalVersion, vertex.relay, vertex.relayOnline, vertex.send]);
   const keys = [["Ctrl+C","\u0003"],["Esc","\u001b"],["Tab","\t"],["|","|"],["/","/"],["↑","\u001b[A"],["↓","\u001b[B"],["←","\u001b[D"],["→","\u001b[C"]];
   const copy = async () => { const value = terminal.current?.getSelection(); if (!value) return setStatus("Select terminal text to copy"); try { await navigator.clipboard.writeText(value); setStatus("Copied"); } catch { setStatus("Copy is unavailable in this app"); } };
   const paste = async () => { try { const value = await navigator.clipboard.readText(); if (value) sendInput(value); } catch { setStatus("Allow clipboard access to paste"); } };
