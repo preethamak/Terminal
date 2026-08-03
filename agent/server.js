@@ -25,6 +25,7 @@ const { DockerService } = require("./docker-service");
 const { SettingsStore } = require("./settings-store");
 const { WorkspaceIndex } = require("./workspace-index");
 const { WorkspaceService } = require("./workspace-service");
+const { readBattery } = require("./power-service");
 
 const PORT = Number(process.env.VERTEX_PORT || 8787);
 const HOST = process.env.VERTEX_HOST || "0.0.0.0";
@@ -38,6 +39,7 @@ const activities = new ActivityStore();
 const notifications = new NotificationService({ activities });
 const taskMonitor = new TaskMonitor({ tasks, manager, activities });
 const relayConfig = new RelayConfig().ensure();
+let relayStatus = relayConfig.relayUrl ? "connecting" : "direct";
 const projects = new ProjectIndex();
 const workspaceIndex = new WorkspaceIndex();
 const workspaces = new WorkspaceService({ index:workspaceIndex });
@@ -101,7 +103,7 @@ function writePairingUrl(url) {
 }
 
 function health() {
-  return { ok:true, hostname:os.hostname(), platform:process.platform, uptimeSeconds:Math.round(process.uptime()), projects:projects.list().length, notification:notifications.status(), preventSleep:settings.read().preventSleep, checkedAt:Date.now() };
+  return { ok:true, hostname:os.hostname(), platform:process.platform, uptimeSeconds:Math.round(process.uptime()), projects:projects.list().length, notification:notifications.status(), preventSleep:settings.read().preventSleep, battery:readBattery(), connectivity:{ transport:relayConfig.relayUrl ? "relay" : "direct", status:relayStatus }, checkedAt:Date.now() };
 }
 
 async function listWorkspaces({ refreshProjects = false } = {}) {
@@ -338,8 +340,8 @@ setInterval(() => { void taskMonitor.poll().catch(() => {}); }, 5000).unref();
 if (relayConfig.relayUrl) {
   const relay = new RelayClient({ relayUrl: relayConfig.relayUrl, machineId: relayConfig.machineId, devices, pairingKey: (code) => devices.pairingKey(code) });
   const relayClients = new Map();
-  relay.on("online", () => console.log(`Vertex relay connected for machine ${relayConfig.machineId}`));
-  relay.on("offline", () => console.log("Vertex relay disconnected; retrying…"));
+  relay.on("online", () => { relayStatus = "connected"; console.log(`Vertex relay connected for machine ${relayConfig.machineId}`); });
+  relay.on("offline", () => { relayStatus = "reconnecting"; console.log("Vertex relay disconnected; retrying…"); });
   relay.on("message", ({ message, keyId, pairCode }) => {
     if (keyId === "pair") {
       if (message.type !== "pair" || message.code !== pairCode) return;
